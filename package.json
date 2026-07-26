@@ -1,0 +1,40 @@
+{
+  "name": "skill-sources",
+  "version": "0.1.0",
+  "description": "Detect when the upstream documents an agent skill derives from have moved",
+  "type": "module",
+  "bin": {
+    "skill-sources": "./bin/cli.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "CONVENTION.md",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "format": "prettier --write \"src/**/*.js\" \"bin/*.mjs\" \"test/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"bin/*.mjs\" \"test/**/*.js\""
+  },
+  "keywords": [
+    "agent-skills",
+    "skills",
+    "SKILL.md",
+    "drift",
+    "freshness",
+    "provenance",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.1",
+    "vitest": "^4.0.17"
+  }
+}
