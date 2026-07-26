@@ -134,7 +134,16 @@ function parse(argv) {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") args.help = true;
     else if (arg === "--json") args.json = true;
-    else if (arg === "-m" || arg === "--manifest") args.manifest = argv[++i];
+    else if (arg === "-m" || arg === "--manifest") {
+      // A flag that silently keeps its default is worse than one that stops:
+      // `--jsonn` in CI would quietly report human text and be believed.
+      const value = argv[++i];
+      if (!value || value.startsWith("-")) {
+        throw new UserError(`${arg} needs a path`);
+      }
+      args.manifest = value;
+    } else if (arg.startsWith("-"))
+      throw new UserError(`Unknown option '${arg}'`);
     else if (!args.command) args.command = arg;
   }
   return args;
