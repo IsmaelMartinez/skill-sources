@@ -43,7 +43,7 @@ describe("an upstream path that is gone", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  function entry(path, recorded) {
+  function entry(path, recorded, ref = "main") {
     return validate({
       sources: [
         {
@@ -53,7 +53,7 @@ describe("an upstream path that is gone", () => {
               type: "git",
               repo: dir,
               path,
-              ref: "main",
+              ref,
               "last-reviewed": recorded,
             },
           ],
@@ -84,6 +84,26 @@ describe("an upstream path that is gone", () => {
     });
     expect(result.status).toBe("drifted");
     expect(result.current).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  // `git log` matches a pathspec, `ls-tree` does not. Reporting such a path as
+  // gone would be a lie that `seed` could never clear.
+  it("leaves a wildcard path to resolve rather than calling it gone", async () => {
+    const [result] = await resolveAll(entry("*.md", firstSha), {
+      resolvers: { git: createGitResolver() },
+    });
+    expect(result.status).toBe("drifted");
+    expect(result.current).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it("reports an unreadable ref without dumping the command", async () => {
+    const absent = "0123456789abcdef0123456789abcdef01234567";
+    const [result] = await resolveAll(entry("kept.md", firstSha, absent), {
+      resolvers: { git: createGitResolver() },
+    });
+    expect(result.status).toBe("error");
+    expect(result.error).toMatch(/could not read/);
+    expect(result.error).not.toMatch(/git ls-tree|--name-only/);
   });
 
   it("answers exists for a path still in the tree", async () => {

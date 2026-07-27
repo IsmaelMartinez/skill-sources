@@ -6,6 +6,9 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
+/** Wildcards, character classes, and the `:(glob)` style prefix. */
+const PATHSPEC_MAGIC = /[*?[]|^:/;
+
 /**
  * Resolving a file-level marker means asking git for the last commit that
  * touched a path, which needs history rather than a snapshot. A blobless
@@ -94,9 +97,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
           timeout: cloneTimeoutMs,
         }));
       } catch (err) {
-        throw new Error(
-          `could not read '${ref ?? "HEAD"}' in ${repo}: ${gitReason(err)}`,
-        );
+        throw readError(err, repo, ref);
       }
 
       const sha = stdout.trim();
@@ -115,13 +116,24 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
      */
     async exists(upstream) {
       const { repo, path, ref } = upstream;
+
+      // `git log` reads `path` as a pathspec and honours wildcards; `ls-tree`
+      // takes plain prefixes and rejects pathspec magic outright. Answering
+      // "no" for a pattern it simply cannot match would call every glob gone,
+      // so those are left for resolve() to settle as they were before.
+      if (PATHSPEC_MAGIC.test(path)) return true;
+
       const dir = await cloneOnce(repo, ref);
-      const { stdout } = await run(
-        "git",
-        ["ls-tree", "-r", "--name-only", ref ?? "HEAD", "--", path],
-        { cwd: dir, timeout: cloneTimeoutMs },
-      );
-      return stdout.trim() !== "";
+      try {
+        const { stdout } = await run(
+          "git",
+          ["ls-tree", "-r", "--name-only", ref ?? "HEAD", "--", path],
+          { cwd: dir, timeout: cloneTimeoutMs },
+        );
+        return stdout.trim() !== "";
+      } catch (err) {
+        throw readError(err, repo, ref);
+      }
     },
 
     /** Clones are reused across entries in one run, then dropped together. */
@@ -133,6 +145,13 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       clones.clear();
     },
   };
+}
+
+/** Shared so `exists` and `resolve` report a bad ref the same sanitised way. */
+function readError(err, repo, ref) {
+  return new Error(
+    `could not read '${ref ?? "HEAD"}' in ${repo}: ${gitReason(err)}`,
+  );
 }
 
 /** Git object names, which no remote lists and only a wider clone can resolve. */
