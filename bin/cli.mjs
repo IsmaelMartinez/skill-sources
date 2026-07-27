@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   DEFAULT_MANIFEST,
   loadManifest,
@@ -14,6 +15,7 @@ import {
   exitCodeFor,
 } from "../src/check.js";
 import { createConfluenceResolver } from "../src/resolvers/confluence.js";
+import { unknownSkills } from "../src/skills.js";
 
 const HELP = `skill-sources — detect when the documents a skill derives from have moved
 
@@ -25,6 +27,9 @@ Usage
 
 Options
   -m, --manifest <path>   Manifest to read (default: ${DEFAULT_MANIFEST})
+      --verify-skills <glob>
+                          Also check every declared skill exists on disk,
+                          e.g. 'skills/*' or 'plugins/*/skills/*'
       --confluence-email-env <name>
                           Variable holding the Confluence account email
                           (default: CONFLUENCE_EMAIL)
@@ -36,7 +41,7 @@ Options
 
 Exit codes
   0  everything fresh
-  1  drift, or a source with no recorded marker
+  1  drift, an unrecorded marker, a path that is gone, or a missing skill
   2  a source could not be resolved
 `;
 
@@ -65,12 +70,20 @@ async function main(argv) {
   }
 
   const { doc, entries } = await loadManifest(args.manifest);
+
+  // Ahead of both the empty-manifest shortcut and any resolving, so a mistyped
+  // glob fails in a second rather than after every clone — or, on a manifest
+  // with nothing in it yet, rather than not at all.
+  const unknown = args.verifySkills
+    ? await unknownSkills(entries, dirname(args.manifest), args.verifySkills)
+    : [];
+
   if (entries.length === 0) {
     if (!args.json)
       process.stdout.write(`No sources declared in ${args.manifest}.\n`);
     else
       process.stdout.write(
-        `${JSON.stringify({ results: [], counts: summarise([]) })}\n`,
+        `${JSON.stringify({ results: [], counts: summarise([]), unknownSkills: [] })}\n`,
       );
     return 0;
   }
@@ -86,24 +99,43 @@ async function main(argv) {
   const counts = summarise(results);
 
   if (args.command === "seed") {
+    // A source whose path is gone has no marker to record. Advancing it would
+    // pin the entry to the commit that removed the document and hide it.
     const updates = new Map(
       results
-        .filter((r) => r.status !== "error")
+        .filter((r) => r.status !== "error" && r.status !== "missing")
         .map((r) => [r.key, r.current]),
     );
     await writeMarkers(args.manifest, doc, updates);
     process.stdout.write(
       `Recorded ${updates.size} marker(s) in ${args.manifest}.\n`,
     );
-    return counts.error > 0 ? 2 : 0;
+    if (counts.missing > 0) {
+      process.stdout.write(
+        `Left ${counts.missing} source(s) alone: their path is gone from the ref.\n`,
+      );
+    }
+    process.stdout.write(unknownReport(unknown, args.verifySkills));
+    if (counts.error > 0) return 2;
+    return counts.missing > 0 || unknown.length > 0 ? 1 : 0;
   }
 
   process.stdout.write(
     args.json
-      ? `${JSON.stringify({ results, counts }, null, 2)}\n`
-      : render(results, counts),
+      ? `${JSON.stringify({ results, counts, unknownSkills: unknown }, null, 2)}\n`
+      : render(results, counts) + unknownReport(unknown, args.verifySkills),
   );
-  return args.command === "report" ? 0 : exitCodeFor(counts);
+  if (args.command === "report") return 0;
+  // An entry for a skill that is not there is its own thing to fix, but never
+  // more serious than a source that could not be resolved at all.
+  return Math.max(exitCodeFor(counts), unknown.length > 0 ? 1 : 0);
+}
+
+function unknownReport(unknown, pattern) {
+  if (unknown.length === 0) return "";
+  return `\nDeclared but not on disk (no match under '${pattern}'):\n${unknown
+    .map((skill) => `  ${skill}\n`)
+    .join("")}`;
 }
 
 async function init(args) {
@@ -118,9 +150,10 @@ async function init(args) {
 
 function render(results, counts) {
   const lines = [];
-  const order = { drifted: 0, unreviewed: 1, error: 2, fresh: 3 };
+  const order = { drifted: 0, missing: 1, unreviewed: 2, error: 3, fresh: 4 };
   const label = {
     drifted: "drifted   ",
+    missing: "missing   ",
     unreviewed: "unreviewed",
     error: "error     ",
     fresh: "fresh     ",
@@ -132,6 +165,8 @@ function render(results, counts) {
     lines.push(`  ${label[r.status]} ${r.skill}  ${r.source}`);
     if (r.status === "drifted")
       lines.push(`               ${r.recorded} -> ${r.current}`);
+    if (r.status === "missing")
+      lines.push(`               gone from the ref; fix or drop this entry`);
     if (r.status === "error") lines.push(`               ${r.error}`);
   }
 
@@ -145,6 +180,7 @@ function render(results, counts) {
 function parse(argv) {
   const args = {
     manifest: DEFAULT_MANIFEST,
+    verifySkills: null,
     confluenceEmailVar: undefined,
     confluenceTokenVar: undefined,
     json: false,
@@ -157,6 +193,8 @@ function parse(argv) {
     else if (arg === "--json") args.json = true;
     else if (arg === "-m" || arg === "--manifest")
       args.manifest = requireValue(arg, argv[++i], "a path");
+    else if (arg === "--verify-skills")
+      args.verifySkills = requireValue(arg, argv[++i], "a glob");
     else if (arg === "--confluence-email-env")
       args.confluenceEmailVar = requireValue(arg, argv[++i], "a variable name");
     else if (arg === "--confluence-token-env")

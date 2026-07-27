@@ -64,6 +64,13 @@ async function resolveOne(entry, resolvers) {
   }
 
   try {
+    // Asked before resolving, because a locator that points at nothing has no
+    // marker worth comparing: advancing it would record a commit that can never
+    // move again and leave the entry looking permanently healthy.
+    if (resolver.exists && !(await resolver.exists(entry.upstream))) {
+      return { ...base, status: "missing" };
+    }
+
     const current = await resolver.resolve(entry.upstream);
     if (
       entry.recorded === null ||
@@ -85,7 +92,7 @@ async function resolveOne(entry, resolvers) {
 }
 
 export function summarise(results) {
-  const counts = { fresh: 0, drifted: 0, unreviewed: 0, error: 0 };
+  const counts = { fresh: 0, drifted: 0, missing: 0, unreviewed: 0, error: 0 };
   for (const r of results) counts[r.status]++;
   return counts;
 }
@@ -97,5 +104,7 @@ export function summarise(results) {
  */
 export function exitCodeFor(counts) {
   if (counts.error > 0) return 2;
-  return counts.drifted > 0 || counts.unreviewed > 0 ? 1 : 0;
+  return counts.drifted > 0 || counts.unreviewed > 0 || counts.missing > 0
+    ? 1
+    : 0;
 }

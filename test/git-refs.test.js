@@ -4,7 +4,11 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createGitResolver, gitReason } from "../src/resolvers/git.js";
+import {
+  createGitResolver,
+  gitReason,
+  remoteRefState,
+} from "../src/resolvers/git.js";
 
 const run = promisify(execFile);
 
@@ -76,14 +80,47 @@ describe("git resolver — refs beyond a branch name", () => {
     }
   }, 60_000);
 
+  // The message is the evidence that the ref was settled against the remote
+  // rather than by widening: had it cloned, the failure would have come from
+  // `git log` failing to resolve the revision, and read quite differently.
   it("names the ref and repo when the ref does not exist", async () => {
     const resolver = createGitResolver();
     try {
       const err = await resolver
         .resolve({ repo: dir, path: "doc.md", ref: "nope" })
         .catch((e) => e);
-      expect(err.message).toContain("nope");
+      expect(err.message).toMatch(/ref 'nope' not found in/);
       expect(err.message).not.toMatch(/git clone|--filter/);
+    } finally {
+      await resolver.cleanup();
+    }
+  }, 60_000);
+
+  // Tested directly because the resolver cannot distinguish the two outcomes
+  // from the outside: `cloneError` happens to produce the same sentence for a
+  // ref the remote does not have, so an assertion on the message would pass
+  // even if the discrimination were removed entirely.
+  it("tells a remote with no such ref apart from a remote that will not answer", async () => {
+    expect(await remoteRefState(dir, "main")).toBe("present");
+    expect(await remoteRefState(dir, "v1.0")).toBe("present");
+    expect(await remoteRefState(dir, "nope")).toBe("absent");
+    expect(await remoteRefState("/nonexistent/repo.git", "main")).toBe(
+      "unreachable",
+    );
+  }, 60_000);
+
+  it("reports an unreachable repository even when the ref is a sha", async () => {
+    const resolver = createGitResolver();
+    try {
+      const err = await resolver
+        .resolve({
+          repo: "/nonexistent/repo.git",
+          path: "doc.md",
+          ref: headSha,
+        })
+        .catch((e) => e);
+      expect(err.message).toMatch(/cannot read|no access/);
+      expect(err.message).not.toMatch(/skill-sources-/);
     } finally {
       await resolver.cleanup();
     }
