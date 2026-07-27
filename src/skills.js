@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { UserError } from "./manifest.js";
 
@@ -10,15 +10,28 @@ import { UserError } from "./manifest.js";
  * so that is the whole of what a layout needs to say.
  */
 export async function findSkillDirs(root, pattern) {
+  // `.` segments are dropped rather than matched, since readdir never yields
+  // one. Dropping them can leave nothing at all — `/` and `.` both do — and a
+  // walk over no segments would return the root and call every skill unknown.
+  const segments = pattern.split("/").filter((s) => s && s !== ".");
+  if (segments.length === 0) {
+    throw new UserError(
+      `'${pattern}' names no directory; give a layout such as 'skills/*'`,
+    );
+  }
+
   let dirs = [""];
-  for (const segment of pattern.split("/").filter(Boolean)) {
+  for (const segment of segments) {
     const next = [];
     for (const dir of dirs) {
       const found = await readdir(join(root, dir), {
         withFileTypes: true,
       }).catch(() => []);
       for (const child of found) {
-        if (child.isDirectory() && matchesSegment(segment, child.name)) {
+        if (
+          matchesSegment(segment, child.name) &&
+          (await isDirectory(root, dir, child))
+        ) {
           next.push(join(dir, child.name));
         }
       }
@@ -26,6 +39,20 @@ export async function findSkillDirs(root, pattern) {
     dirs = next;
   }
   return dirs;
+}
+
+/**
+ * A dirent reports a symlink as a symlink, never as a directory, and skills
+ * symlinked into a flat directory is a normal enough layout that treating one
+ * as absent would fail a build for no reason.
+ */
+async function isDirectory(root, dir, child) {
+  if (child.isDirectory()) return true;
+  if (!child.isSymbolicLink()) return false;
+  return stat(join(root, dir, child.name)).then(
+    (stats) => stats.isDirectory(),
+    () => false,
+  );
 }
 
 /**

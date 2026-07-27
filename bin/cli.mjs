@@ -58,6 +58,14 @@ async function main(argv) {
   }
 
   const { doc, entries } = await loadManifest(args.manifest);
+
+  // Ahead of both the empty-manifest shortcut and any resolving, so a mistyped
+  // glob fails in a second rather than after every clone — or, on a manifest
+  // with nothing in it yet, rather than not at all.
+  const unknown = args.verifySkills
+    ? await unknownSkills(entries, dirname(args.manifest), args.verifySkills)
+    : [];
+
   if (entries.length === 0) {
     if (!args.json)
       process.stdout.write(`No sources declared in ${args.manifest}.\n`);
@@ -67,12 +75,6 @@ async function main(argv) {
       );
     return 0;
   }
-
-  // Checked before anything is resolved, so a mistyped glob fails in a second
-  // rather than after every clone.
-  const unknown = args.verifySkills
-    ? await unknownSkills(entries, dirname(args.manifest), args.verifySkills)
-    : [];
 
   const results = await resolveAll(entries);
   const counts = summarise(results);
