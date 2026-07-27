@@ -206,3 +206,76 @@ sources:
     });
   }, 60_000);
 });
+
+describe("--verify-skills", () => {
+  // Seeded first so every source is fresh: whatever the exit code turns out to
+  // be, it can only have come from the skill that is not on disk.
+  async function withSeeded(fn) {
+    return withDir(async (dir) => {
+      const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
+      await mkdir(join(dir, "skills", "present"), { recursive: true });
+      await writeFile(
+        join(dir, "skill-sources.yml"),
+        `version: 1
+sources:
+  - skill: present
+    upstream:
+      - type: git
+        repo: ${repo}
+        path: README.md
+        last-reviewed: ""
+  - skill: vanished
+    upstream:
+      - type: git
+        repo: ${repo}
+        path: README.md
+        last-reviewed: ""
+`,
+      );
+      await runCli(["seed"], dir);
+      return fn(dir);
+    });
+  }
+
+  it("names a declared skill that has no directory", async () => {
+    await withSeeded(async (dir) => {
+      const res = await runCli(["check", "--verify-skills", "skills/*"], dir);
+      expect(res.code).toBe(1);
+      expect(res.stdout).toMatch(/Declared but not on disk/);
+      expect(res.stdout).toContain("vanished");
+    });
+  }, 60_000);
+
+  it("passes once every declared skill is on disk", async () => {
+    await withSeeded(async (dir) => {
+      await mkdir(join(dir, "skills", "vanished"), { recursive: true });
+      const res = await runCli(["check", "--verify-skills", "skills/*"], dir);
+      expect(res.code).toBe(0);
+      expect(res.stdout).not.toMatch(/Declared but not on disk/);
+    });
+  }, 60_000);
+
+  it("reports unknown skills in json too", async () => {
+    await withSeeded(async (dir) => {
+      const res = await runCli(
+        ["report", "--json", "--verify-skills", "skills/*"],
+        dir,
+      );
+      expect(JSON.parse(res.stdout).unknownSkills).toEqual(["vanished"]);
+    });
+  }, 60_000);
+
+  it("stops on a glob that matches nothing rather than blaming every skill", async () => {
+    await withSeeded(async (dir) => {
+      const res = await runCli(["check", "--verify-skills", "nope/*"], dir);
+      expect(res.code).toBe(2);
+      expect(res.stderr).toMatch(/matched no directories/);
+    });
+  }, 60_000);
+
+  it("rejects --verify-skills with no value", async () => {
+    const res = await runCli(["check", "--verify-skills"]);
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/needs a glob/);
+  });
+});

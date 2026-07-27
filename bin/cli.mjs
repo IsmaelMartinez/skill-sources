@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   DEFAULT_MANIFEST,
   loadManifest,
@@ -8,6 +9,7 @@ import {
   UserError,
 } from "../src/manifest.js";
 import { resolveAll, summarise, exitCodeFor } from "../src/check.js";
+import { unknownSkills } from "../src/skills.js";
 
 const HELP = `skill-sources — detect when the documents a skill derives from have moved
 
@@ -19,12 +21,15 @@ Usage
 
 Options
   -m, --manifest <path>   Manifest to read (default: ${DEFAULT_MANIFEST})
+      --verify-skills <glob>
+                          Also check every declared skill exists on disk,
+                          e.g. 'skills/*' or 'plugins/*/skills/*'
       --json              Machine-readable output
   -h, --help              Show this help
 
 Exit codes
   0  everything fresh
-  1  drift, a source with no recorded marker, or a path that is gone
+  1  drift, an unrecorded marker, a path that is gone, or a missing skill
   2  a source could not be resolved
 `;
 
@@ -53,12 +58,20 @@ async function main(argv) {
   }
 
   const { doc, entries } = await loadManifest(args.manifest);
+
+  // Ahead of both the empty-manifest shortcut and any resolving, so a mistyped
+  // glob fails in a second rather than after every clone — or, on a manifest
+  // with nothing in it yet, rather than not at all.
+  const unknown = args.verifySkills
+    ? await unknownSkills(entries, dirname(args.manifest), args.verifySkills)
+    : [];
+
   if (entries.length === 0) {
     if (!args.json)
       process.stdout.write(`No sources declared in ${args.manifest}.\n`);
     else
       process.stdout.write(
-        `${JSON.stringify({ results: [], counts: summarise([]) })}\n`,
+        `${JSON.stringify({ results: [], counts: summarise([]), unknownSkills: [] })}\n`,
       );
     return 0;
   }
@@ -83,16 +96,27 @@ async function main(argv) {
         `Left ${counts.missing} source(s) alone: their path is gone from the ref.\n`,
       );
     }
+    process.stdout.write(unknownReport(unknown, args.verifySkills));
     if (counts.error > 0) return 2;
-    return counts.missing > 0 ? 1 : 0;
+    return counts.missing > 0 || unknown.length > 0 ? 1 : 0;
   }
 
   process.stdout.write(
     args.json
-      ? `${JSON.stringify({ results, counts }, null, 2)}\n`
-      : render(results, counts),
+      ? `${JSON.stringify({ results, counts, unknownSkills: unknown }, null, 2)}\n`
+      : render(results, counts) + unknownReport(unknown, args.verifySkills),
   );
-  return args.command === "report" ? 0 : exitCodeFor(counts);
+  if (args.command === "report") return 0;
+  // An entry for a skill that is not there is its own thing to fix, but never
+  // more serious than a source that could not be resolved at all.
+  return Math.max(exitCodeFor(counts), unknown.length > 0 ? 1 : 0);
+}
+
+function unknownReport(unknown, pattern) {
+  if (unknown.length === 0) return "";
+  return `\nDeclared but not on disk (no match under '${pattern}'):\n${unknown
+    .map((skill) => `  ${skill}\n`)
+    .join("")}`;
 }
 
 async function init(args) {
@@ -137,6 +161,7 @@ function render(results, counts) {
 function parse(argv) {
   const args = {
     manifest: DEFAULT_MANIFEST,
+    verifySkills: null,
     json: false,
     help: false,
     command: null,
@@ -145,19 +170,25 @@ function parse(argv) {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") args.help = true;
     else if (arg === "--json") args.json = true;
-    else if (arg === "-m" || arg === "--manifest") {
-      // A flag that silently keeps its default is worse than one that stops:
-      // `--jsonn` in CI would quietly report human text and be believed.
-      const value = argv[++i];
-      if (!value || value.startsWith("-")) {
-        throw new UserError(`${arg} needs a path`);
-      }
-      args.manifest = value;
-    } else if (arg.startsWith("-"))
+    else if (arg === "-m" || arg === "--manifest")
+      args.manifest = requireValue(arg, argv[++i], "a path");
+    else if (arg === "--verify-skills")
+      args.verifySkills = requireValue(arg, argv[++i], "a glob");
+    // A flag that silently keeps its default is worse than one that stops:
+    // `--jsonn` in CI would quietly report human text and be believed.
+    else if (arg.startsWith("-"))
       throw new UserError(`Unknown option '${arg}'`);
     else if (!args.command) args.command = arg;
   }
   return args;
+}
+
+/** The next argument, unless it is missing or is itself a flag. */
+function requireValue(arg, value, what) {
+  if (!value || value.startsWith("-")) {
+    throw new UserError(`${arg} needs ${what}`);
+  }
+  return value;
 }
 
 try {
