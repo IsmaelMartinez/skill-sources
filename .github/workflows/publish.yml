@@ -5,9 +5,13 @@ on:
     types: [published]
   workflow_dispatch:
 
+# OIDC-first: with a trusted publisher configured on npmjs.com for this
+# repo + workflow file, npm authenticates via the Actions OIDC token and no
+# npm token secret is needed. Trusted publishing cannot create a package,
+# so the first-ever publish bootstraps with a short-lived granular token in
+# the NPM_TOKEN secret; delete the secret once the trusted publisher is set.
 permissions:
   contents: read
-  # npm publish --provenance attests the build via the Actions OIDC token.
   id-token: write
 
 jobs:
@@ -21,11 +25,14 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1+; Node 22 bundles npm 10.
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm test
       - run: npm publish --provenance --access public
         env:
+          # Empty once the bootstrap secret is deleted; npm tries OIDC first.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
