@@ -40,9 +40,18 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
         );
         return dir;
       } catch (err) {
-        if (!(await repoIsReachable(repo, cloneTimeoutMs)))
-          throw cloneError(err, repo, ref);
         await rm(dir, { recursive: true, force: true });
+
+        // A commit SHA is the case widening exists for, and the remote will not
+        // advertise it, so there is nothing to ask. Anything else the remote can
+        // answer for directly — and a typo is not worth a full clone to find out
+        // that `git log` cannot resolve it either.
+        if (!looksLikeSha(ref)) {
+          const state = await remoteRefState(repo, ref, cloneTimeoutMs);
+          if (state === "absent")
+            throw new Error(`ref '${ref}' not found in ${repo}`);
+          if (state === "unreachable") throw cloneError(err, repo, ref);
+        }
       }
     }
 
@@ -106,12 +115,22 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
   };
 }
 
-async function repoIsReachable(repo, timeout) {
+/** Git object names, which no remote lists and only a wider clone can resolve. */
+function looksLikeSha(ref) {
+  return /^[0-9a-f]{7,40}$/i.test(ref);
+}
+
+/**
+ * `--exit-code` separates the two failures that lead to different places: 2 is
+ * the remote answering that it has no such ref, anything else is the remote not
+ * answering at all.
+ */
+async function remoteRefState(repo, ref, timeout) {
   try {
-    await run("git", ["ls-remote", "--exit-code", repo, "HEAD"], { timeout });
-    return true;
-  } catch {
-    return false;
+    await run("git", ["ls-remote", "--exit-code", repo, ref], { timeout });
+    return "present";
+  } catch (err) {
+    return err?.code === 2 ? "absent" : "unreachable";
   }
 }
 

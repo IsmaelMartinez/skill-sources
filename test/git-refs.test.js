@@ -76,14 +76,34 @@ describe("git resolver — refs beyond a branch name", () => {
     }
   }, 60_000);
 
+  // The message is the evidence that the ref was settled against the remote
+  // rather than by widening: had it cloned, the failure would have come from
+  // `git log` failing to resolve the revision, and read quite differently.
   it("names the ref and repo when the ref does not exist", async () => {
     const resolver = createGitResolver();
     try {
       const err = await resolver
         .resolve({ repo: dir, path: "doc.md", ref: "nope" })
         .catch((e) => e);
-      expect(err.message).toContain("nope");
+      expect(err.message).toMatch(/ref 'nope' not found in/);
       expect(err.message).not.toMatch(/git clone|--filter/);
+    } finally {
+      await resolver.cleanup();
+    }
+  }, 60_000);
+
+  it("reports an unreachable repository even when the ref is a sha", async () => {
+    const resolver = createGitResolver();
+    try {
+      const err = await resolver
+        .resolve({
+          repo: "/nonexistent/repo.git",
+          path: "doc.md",
+          ref: headSha,
+        })
+        .catch((e) => e);
+      expect(err.message).toMatch(/cannot read|no access/);
+      expect(err.message).not.toMatch(/skill-sources-/);
     } finally {
       await resolver.cleanup();
     }
