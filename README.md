@@ -84,6 +84,11 @@ file-level, so unrelated commits to the repository do not raise false drift.
 `-m, --manifest <path>` reads a different file. `--json` emits machine-readable
 output.
 
+`--verify-skills <glob>` also checks that every declared skill is on disk.
+Without it, an entry left behind by a renamed or deleted skill keeps resolving
+its upstream quite happily and nothing notices. Layouts differ, so name yours:
+`--verify-skills 'skills/*'`, or `'plugins/*/skills/*'` where skills are nested.
+
 An unreviewed source — one with no `last-reviewed` yet — fails `check` rather
 than passing, because a missing marker is not evidence that a skill is current.
 
