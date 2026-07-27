@@ -81,7 +81,7 @@ name of a variable, not its value, so the token never reaches the command line.
 | Command | Does |
 | --- | --- |
 | `check` | Report drift. Exit 1 on drift, an unreviewed source, a path that is gone or a skill that is not on disk; 2 on error. |
-| `report` | Same output, always exit 0. |
+| `report` | Same output, exit 0 whatever it finds. |
 | `seed` | Record current markers into the manifest. |
 | `init` | Write a starter manifest. |
 
@@ -93,6 +93,12 @@ Without it, an entry left behind by a renamed or deleted skill keeps resolving
 its upstream quite happily and nothing notices. Layouts differ, so name yours:
 `--verify-skills 'skills/*'`, or `'plugins/*/skills/*'` where skills are nested.
 
+The glob is relative to the manifest's own directory, and matches directories
+only — a symlink to one counts. `*` stands for any run of characters within a
+single path segment; there is no `**`, so a run of stars means the same as one,
+and the depth of your layout is the depth you write. Nothing is hidden from it,
+including dot-directories.
+
 An unreviewed source — one with no `last-reviewed` yet — fails `check` rather
 than passing, because a missing marker is not evidence that a skill is current.
 
@@ -101,6 +107,10 @@ than as drift, and `seed` leaves it alone. Renaming a document upstream would
 otherwise look like an ordinary change: seeding it records the commit that did
 the rename, and since nothing will touch the old path again, the entry stays
 green for good while the document carries on moving under its new name.
+
+`report` never fails on what it finds, but a mistake in how it was called — no
+manifest, a glob matching nothing — still exits 2, because that is not a
+finding.
 
 ## In CI
 
