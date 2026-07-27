@@ -4,7 +4,11 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createGitResolver, gitReason } from "../src/resolvers/git.js";
+import {
+  createGitResolver,
+  gitReason,
+  remoteRefState,
+} from "../src/resolvers/git.js";
 
 const run = promisify(execFile);
 
@@ -90,6 +94,19 @@ describe("git resolver — refs beyond a branch name", () => {
     } finally {
       await resolver.cleanup();
     }
+  }, 60_000);
+
+  // Tested directly because the resolver cannot distinguish the two outcomes
+  // from the outside: `cloneError` happens to produce the same sentence for a
+  // ref the remote does not have, so an assertion on the message would pass
+  // even if the discrimination were removed entirely.
+  it("tells a remote with no such ref apart from a remote that will not answer", async () => {
+    expect(await remoteRefState(dir, "main")).toBe("present");
+    expect(await remoteRefState(dir, "v1.0")).toBe("present");
+    expect(await remoteRefState(dir, "nope")).toBe("absent");
+    expect(await remoteRefState("/nonexistent/repo.git", "main")).toBe(
+      "unreachable",
+    );
   }, 60_000);
 
   it("reports an unreachable repository even when the ref is a sha", async () => {

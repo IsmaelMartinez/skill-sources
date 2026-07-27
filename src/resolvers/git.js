@@ -154,7 +154,13 @@ function readError(err, repo, ref) {
   );
 }
 
-/** Git object names, which no remote lists and only a wider clone can resolve. */
+/**
+ * Git object names, which no remote lists and only a wider clone can resolve.
+ *
+ * A branch or tag named `cafebabe` is caught by this too. That costs nothing:
+ * if it exists the narrow clone already succeeded and we never got here, and
+ * if it does not, the only price is one wide clone before the same failure.
+ */
 function looksLikeSha(ref) {
   return /^[0-9a-f]{7,40}$/i.test(ref);
 }
@@ -164,7 +170,7 @@ function looksLikeSha(ref) {
  * the remote answering that it has no such ref, anything else is the remote not
  * answering at all.
  */
-async function remoteRefState(repo, ref, timeout) {
+export async function remoteRefState(repo, ref, timeout = 120_000) {
   try {
     await run("git", ["ls-remote", "--exit-code", repo, ref], { timeout });
     return "present";
