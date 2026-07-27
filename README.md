@@ -90,21 +90,109 @@ than passing, because a missing marker is not evidence that a skill is current.
 ## In CI
 
 Opening the pull request is deliberately left to you, so the tool stays
-host-agnostic. `--json` gives you what you need:
+host-agnostic. `--json` gives you what you need.
+
+### Reaching a private upstream
+
+The repository being watched is not the repository the job runs in, and a
+checkout token scoped to the current project grants nothing against it. Git
+sources are resolved by running `git clone`, with whatever credentials git is
+already configured with — the tool carries no token of its own. So a runner
+starts with no way in, and the first run fails on an access error that does not
+obviously point at its cause.
+
+Give the runner either a read-only SSH deploy key, or an HTTPS token. Put the
+token in git's own configuration rather than in the manifest, rewriting the
+upstream URL with `insteadOf`, and the file you commit stays free of
+credentials.
+
+Confluence is the exception: it goes through the Confluence REST API rather
+than git, so it needs `CONFLUENCE_EMAIL` and `CONFLUENCE_API_TOKEN` in the job
+environment whatever you do about git.
+
+### GitHub Actions
 
 ```yaml
-- run: npx skill-sources check --json > drift.json
-  continue-on-error: true
-- run: npx skill-sources seed
-- uses: peter-evans/create-pull-request@v6
-  with:
-    title: "Upstream sources have moved"
-    body-path: drift.json
+name: skill sources
+on:
+  schedule: [{ cron: "0 6 * * 1" }]
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Only needed for a private upstream. Omit for public ones.
+      - name: Authenticate to the upstream
+        env:
+          UPSTREAM_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${UPSTREAM_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
+
+      - run: npx skill-sources check --json > drift.json
+        continue-on-error: true
+        env:
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+
+      - run: npx skill-sources seed
+        env:
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          title: "Upstream sources have moved"
+          body-path: drift.json
 ```
 
-Review the change, decide whether each skill still says the right thing, and
-merge to move the baseline forward. Accepting an upstream change as irrelevant
-should be as cheap as acting on it — otherwise the gate gets routed around.
+For a deploy key instead of a token, write the key to `~/.ssh` and add the
+upstream host to `known_hosts` before the check step:
+
+```yaml
+      - name: Authenticate to the upstream
+        env:
+          DEPLOY_KEY: ${{ secrets.UPSTREAM_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+```
+
+### GitLab CI
+
+```yaml
+skill-sources:
+  image: node:22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  before_script:
+    # A masked variable holding a token with read_repository on the repository
+    # being watched, not on this one. CONFLUENCE_* are masked variables too.
+    - git config --global url."https://oauth2:${UPSTREAM_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/"
+  script:
+    - npx skill-sources check --json > drift.json
+  artifacts:
+    when: always
+    paths: [drift.json]
+```
+
+The job fails on drift, which is the point of a gate. To have it open a merge
+request instead, run `report --json` so it always succeeds, then `seed`, then
+push a branch and call the MR API — the same shape as the Actions example.
+
+Review the change either way, decide whether each skill still says the right
+thing, and merge to move the baseline forward. Accepting an upstream change as
+irrelevant should be as cheap as acting on it — otherwise the gate gets routed
+around.
 
 ## Related work
 
