@@ -16,6 +16,8 @@ describe("findSkillDirs", () => {
       "plugins/one/skills/gamma",
       "plugins/two/skills/delta",
       "docs/not-a-skill",
+      // Long enough that a backtracking matcher would not finish on it.
+      "a".repeat(60),
     ]) {
       await mkdir(join(root, dir), { recursive: true });
     }
@@ -45,8 +47,39 @@ describe("findSkillDirs", () => {
     expect(await findSkillDirs(root, "plugins/o*")).toEqual(["plugins/one"]);
   });
 
+  it("anchors what follows a wildcard, at the end and in the middle", async () => {
+    expect(await findSkillDirs(root, "plugins/*e")).toEqual(["plugins/one"]);
+    expect(await findSkillDirs(root, "plugins/t*o")).toEqual(["plugins/two"]);
+    expect(await findSkillDirs(root, "plugins/*n")).toEqual([]);
+  });
+
+  it("matches a segment with no wildcard exactly", async () => {
+    expect(await findSkillDirs(root, "plugins/one")).toEqual(["plugins/one"]);
+    expect(await findSkillDirs(root, "plugins/on")).toEqual([]);
+  });
+
   it("returns nothing for a layout that is not there", async () => {
     expect(await findSkillDirs(root, "nowhere/*")).toEqual([]);
+  });
+
+  // A regex-based matcher took over a minute on each of these, because every
+  // `*` multiplies the ways the name can be split between them.
+  it("does not backtrack catastrophically on a run of stars", async () => {
+    const started = Date.now();
+    expect(await findSkillDirs(root, `${"*".repeat(12)}nomatch`)).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("does not backtrack catastrophically on stars split by literals", async () => {
+    const started = Date.now();
+    expect(await findSkillDirs(root, `${"a*".repeat(12)}z`)).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("treats a run of stars as one, since globstar is not implemented", async () => {
+    expect(await findSkillDirs(root, "skills/**")).toEqual(
+      await findSkillDirs(root, "skills/*"),
+    );
   });
 });
 

@@ -12,14 +12,13 @@ import { UserError } from "./manifest.js";
 export async function findSkillDirs(root, pattern) {
   let dirs = [""];
   for (const segment of pattern.split("/").filter(Boolean)) {
-    const matches = segmentMatcher(segment);
     const next = [];
     for (const dir of dirs) {
       const found = await readdir(join(root, dir), {
         withFileTypes: true,
       }).catch(() => []);
       for (const child of found) {
-        if (child.isDirectory() && matches(child.name)) {
+        if (child.isDirectory() && matchesSegment(segment, child.name)) {
           next.push(join(dir, child.name));
         }
       }
@@ -47,12 +46,39 @@ export async function unknownSkills(entries, root, pattern) {
   return [...declared].filter((skill) => !present.has(skill));
 }
 
-function segmentMatcher(segment) {
-  const pattern = segment.split("*").map(escapeRegExp).join("[^/]*");
-  const regex = new RegExp(`^${pattern}$`);
-  return (name) => regex.test(name);
-}
+/**
+ * Matches one name against one segment, where `*` stands for any run of
+ * characters and everything else is literal.
+ *
+ * Deliberately not a regular expression. Building one turns each `*` into
+ * `[^/]*`, and a segment carrying several of those makes the engine try every
+ * way of splitting the name between them — `a*a*a*a*a*a*a*a*a*a*z` against a
+ * forty-character directory took seven seconds, and a run of bare stars far
+ * worse. This walks the two strings once, remembering only the last `*` to
+ * fall back to, so the cost stays proportional to their lengths.
+ */
+function matchesSegment(segment, name) {
+  let s = 0;
+  let n = 0;
+  let star = -1;
+  let retry = 0;
 
-function escapeRegExp(literal) {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  while (n < name.length) {
+    if (s < segment.length && segment[s] === name[n]) {
+      s++;
+      n++;
+    } else if (s < segment.length && segment[s] === "*") {
+      star = s++;
+      retry = n;
+    } else if (star >= 0) {
+      // Give the last `*` one more character and carry on from there.
+      s = star + 1;
+      n = ++retry;
+    } else {
+      return false;
+    }
+  }
+
+  while (s < segment.length && segment[s] === "*") s++;
+  return s === segment.length;
 }
