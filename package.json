@@ -17,6 +17,15 @@
     "format": "prettier --write \"src/**/*.js\" \"bin/*.mjs\" \"test/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\" \"bin/*.mjs\" \"test/**/*.js\""
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IsmaelMartinez/skill-sources.git"
+  },
+  "homepage": "https://github.com/IsmaelMartinez/skill-sources#readme",
+  "bugs": {
+    "url": "https://github.com/IsmaelMartinez/skill-sources/issues"
+  },
+  "author": "Ismael Martinez",
   "keywords": [
     "agent-skills",
     "skills",
