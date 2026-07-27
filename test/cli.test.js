@@ -4,6 +4,9 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const run = promisify(execFile);
 
 const CLI = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -165,6 +168,41 @@ sources:
 
       await runCli(["seed"], dir);
       expect(await readFile(manifest, "utf-8")).toBe(after);
+    });
+  }, 60_000);
+
+  it("refuses to record a marker for a path that is gone", async () => {
+    await withDir(async (dir) => {
+      const repo = join(dir, "upstream");
+      await mkdir(repo);
+      const git = (...args) => run("git", args, { cwd: repo });
+      await git("init", "-q", "-b", "main");
+      await git("config", "user.email", "t@e.c");
+      await git("config", "user.name", "T");
+      await git("config", "commit.gpgsign", "false");
+      await writeFile(join(repo, "old.md"), "v1\n");
+      await git("add", "-A");
+      await git("commit", "-qm", "one");
+      await git("mv", "old.md", "new.md");
+      await git("commit", "-qm", "rename");
+
+      const manifest = join(dir, "skill-sources.yml");
+      const body = `version: 1
+sources:
+  - skill: docs
+    upstream:
+      - type: git
+        repo: ${repo}
+        path: old.md
+        ref: main
+        last-reviewed: ""
+`;
+      await writeFile(manifest, body);
+
+      const res = await runCli(["seed"], dir);
+      expect(res.code).toBe(1);
+      expect(res.stdout).toMatch(/Recorded 0 marker/);
+      expect(await readFile(manifest, "utf-8")).toBe(body);
     });
   }, 60_000);
 });
