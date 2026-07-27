@@ -12,7 +12,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # The cli tests use this repository's own history as a git-upstream
+      # fixture; a shallow checkout makes the resolver's local clone hang
+      # (git's --filter fallback loops against a shallow source) and would
+      # seed the shallow boundary commit rather than the real one.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
