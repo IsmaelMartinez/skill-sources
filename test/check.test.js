@@ -80,6 +80,35 @@ describe("resolveAll", () => {
     expect(result.status).toBe("fresh");
   });
 
+  it("marks a source whose locator points at nothing, without resolving it", async () => {
+    let resolved = false;
+    const gone = validate({
+      sources: [
+        {
+          skill: "a",
+          upstream: [
+            { type: "git", repo: "r", path: "p", "last-reviewed": "v1" },
+          ],
+        },
+      ],
+    });
+    const [result] = await resolveAll(gone, {
+      resolvers: {
+        git: {
+          async exists() {
+            return false;
+          },
+          async resolve() {
+            resolved = true;
+            return "v2";
+          },
+        },
+      },
+    });
+    expect(result.status).toBe("missing");
+    expect(resolved).toBe(false);
+  });
+
   it("reports an unknown type as an error rather than throwing", async () => {
     const bad = validate({
       sources: [
@@ -112,6 +141,18 @@ describe("exitCodeFor", () => {
     expect(exitCodeFor({ fresh: 1, drifted: 0, unreviewed: 1, error: 0 })).toBe(
       1,
     );
+  });
+
+  it("fails on a source whose path is gone", () => {
+    expect(
+      exitCodeFor({
+        fresh: 1,
+        drifted: 0,
+        missing: 1,
+        unreviewed: 0,
+        error: 0,
+      }),
+    ).toBe(1);
   });
 
   it("distinguishes an unresolvable source from drift", () => {
