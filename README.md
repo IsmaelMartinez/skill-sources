@@ -76,7 +76,7 @@ file-level, so unrelated commits to the repository do not raise false drift.
 
 | Command | Does |
 | --- | --- |
-| `check` | Report drift. Exit 1 on drift or an unreviewed source, 2 on error. |
+| `check` | Report drift. Exit 1 on drift, an unreviewed source or a path that is gone, 2 on error. |
 | `report` | Same output, always exit 0. |
 | `seed` | Record current markers into the manifest. |
 | `init` | Write a starter manifest. |
@@ -86,6 +86,12 @@ output.
 
 An unreviewed source — one with no `last-reviewed` yet — fails `check` rather
 than passing, because a missing marker is not evidence that a skill is current.
+
+A source whose path is no longer in the tree is reported as `missing` rather
+than as drift, and `seed` leaves it alone. Renaming a document upstream would
+otherwise look like an ordinary change: seeding it records the commit that did
+the rename, and since nothing will touch the old path again, the entry stays
+green for good while the document carries on moving under its new name.
 
 ## In CI
 

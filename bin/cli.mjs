@@ -24,7 +24,7 @@ Options
 
 Exit codes
   0  everything fresh
-  1  drift, or a source with no recorded marker
+  1  drift, a source with no recorded marker, or a path that is gone
   2  a source could not be resolved
 `;
 
@@ -67,16 +67,24 @@ async function main(argv) {
   const counts = summarise(results);
 
   if (args.command === "seed") {
+    // A source whose path is gone has no marker to record. Advancing it would
+    // pin the entry to the commit that removed the document and hide it.
     const updates = new Map(
       results
-        .filter((r) => r.status !== "error")
+        .filter((r) => r.status !== "error" && r.status !== "missing")
         .map((r) => [r.key, r.current]),
     );
     await writeMarkers(args.manifest, doc, updates);
     process.stdout.write(
       `Recorded ${updates.size} marker(s) in ${args.manifest}.\n`,
     );
-    return counts.error > 0 ? 2 : 0;
+    if (counts.missing > 0) {
+      process.stdout.write(
+        `Left ${counts.missing} source(s) alone: their path is gone from the ref.\n`,
+      );
+    }
+    if (counts.error > 0) return 2;
+    return counts.missing > 0 ? 1 : 0;
   }
 
   process.stdout.write(
@@ -99,9 +107,10 @@ async function init(args) {
 
 function render(results, counts) {
   const lines = [];
-  const order = { drifted: 0, unreviewed: 1, error: 2, fresh: 3 };
+  const order = { drifted: 0, missing: 1, unreviewed: 2, error: 3, fresh: 4 };
   const label = {
     drifted: "drifted   ",
+    missing: "missing   ",
     unreviewed: "unreviewed",
     error: "error     ",
     fresh: "fresh     ",
@@ -113,6 +122,8 @@ function render(results, counts) {
     lines.push(`  ${label[r.status]} ${r.skill}  ${r.source}`);
     if (r.status === "drifted")
       lines.push(`               ${r.recorded} -> ${r.current}`);
+    if (r.status === "missing")
+      lines.push(`               gone from the ref; fix or drop this entry`);
     if (r.status === "error") lines.push(`               ${r.error}`);
   }
 
