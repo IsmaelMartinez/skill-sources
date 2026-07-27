@@ -8,7 +8,13 @@ import {
   writeMarkers,
   UserError,
 } from "../src/manifest.js";
-import { resolveAll, summarise, exitCodeFor } from "../src/check.js";
+import {
+  resolveAll,
+  defaultResolvers,
+  summarise,
+  exitCodeFor,
+} from "../src/check.js";
+import { createConfluenceResolver } from "../src/resolvers/confluence.js";
 import { unknownSkills } from "../src/skills.js";
 
 const HELP = `skill-sources — detect when the documents a skill derives from have moved
@@ -24,6 +30,12 @@ Options
       --verify-skills <glob>
                           Also check every declared skill exists on disk,
                           e.g. 'skills/*' or 'plugins/*/skills/*'
+      --confluence-email-env <name>
+                          Variable holding the Confluence account email
+                          (default: CONFLUENCE_EMAIL)
+      --confluence-token-env <name>
+                          Variable holding the Confluence API token
+                          (default: CONFLUENCE_API_TOKEN)
       --json              Machine-readable output
   -h, --help              Show this help
 
@@ -74,7 +86,14 @@ async function main(argv) {
     ? await unknownSkills(entries, dirname(args.manifest), args.verifySkills)
     : [];
 
-  const results = await resolveAll(entries);
+  const results = await resolveAll(entries, {
+    resolvers: defaultResolvers({
+      confluence: createConfluenceResolver({
+        emailVar: args.confluenceEmailVar,
+        tokenVar: args.confluenceTokenVar,
+      }),
+    }),
+  });
   const counts = summarise(results);
 
   if (args.command === "seed") {
@@ -160,6 +179,8 @@ function parse(argv) {
   const args = {
     manifest: DEFAULT_MANIFEST,
     verifySkills: null,
+    confluenceEmailVar: undefined,
+    confluenceTokenVar: undefined,
     json: false,
     help: false,
     command: null,
@@ -172,6 +193,10 @@ function parse(argv) {
       args.manifest = requireValue(arg, argv[++i], "a path");
     else if (arg === "--verify-skills")
       args.verifySkills = requireValue(arg, argv[++i], "a glob");
+    else if (arg === "--confluence-email-env")
+      args.confluenceEmailVar = requireValue(arg, argv[++i], "a variable name");
+    else if (arg === "--confluence-token-env")
+      args.confluenceTokenVar = requireValue(arg, argv[++i], "a variable name");
     // A flag that silently keeps its default is worse than one that stops:
     // `--jsonn` in CI would quietly report human text and be believed.
     else if (arg.startsWith("-"))

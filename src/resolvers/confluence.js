@@ -6,18 +6,26 @@ const TIMEOUT_MS = 30_000;
  * A Confluence page carries its own version counter, which is a far better
  * marker than anything derived from the rendered body: it moves on exactly the
  * edits a human would call a change, and not on re-renders.
+ *
+ * Which variables the credentials arrive in is configurable, because a pipeline
+ * that already exposes them under its own names should not have to rename its
+ * secrets to suit this tool. Names rather than values: a token passed as an
+ * argument would be visible in the process list and in shell history.
  */
 export function createConfluenceResolver({
   fetchImpl = fetch,
-  email = process.env.CONFLUENCE_EMAIL,
-  token = process.env.CONFLUENCE_API_TOKEN,
+  env = process.env,
+  emailVar = "CONFLUENCE_EMAIL",
+  tokenVar = "CONFLUENCE_API_TOKEN",
 } = {}) {
   return {
     async resolve(upstream) {
       const { origin, pageId } = parsePageUrl(upstream.uri);
+      const email = env[emailVar];
+      const token = env[tokenVar];
       if (!email || !token) {
         throw new UserError(
-          "Confluence sources need CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN to be set",
+          `Confluence sources need ${emailVar} and ${tokenVar} to be set`,
         );
       }
 
