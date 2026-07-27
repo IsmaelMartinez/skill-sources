@@ -95,6 +95,26 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       return sha;
     },
 
+    /**
+     * `git log` answers for a path that has been renamed or deleted — it
+     * returns the commit that did it — so the marker alone cannot tell the two
+     * apart from an ordinary edit. Asking the tree whether the path is still
+     * there can.
+     *
+     * `ls-tree` reads tree objects only, so it stays within what a blobless
+     * clone has locally.
+     */
+    async exists(upstream) {
+      const { repo, path, ref } = upstream;
+      const dir = await cloneOnce(repo, ref);
+      const { stdout } = await run(
+        "git",
+        ["ls-tree", "-r", "--name-only", ref ?? "HEAD", "--", path],
+        { cwd: dir, timeout: cloneTimeoutMs },
+      );
+      return stdout.trim() !== "";
+    },
+
     /** Clones are reused across entries in one run, then dropped together. */
     async cleanup() {
       await Promise.all(
