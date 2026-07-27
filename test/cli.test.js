@@ -62,6 +62,12 @@ describe("cli argument handling", () => {
     });
   });
 
+  it("rejects --confluence-token-env with no value", async () => {
+    const res = await runCli(["check", "--confluence-token-env"]);
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/needs a variable name/);
+  });
+
   it("rejects an unknown command", async () => {
     const res = await runCli(["frobnicate"]);
     expect(res.code).toBe(1);
@@ -109,6 +115,35 @@ sources:
       expect(res.stderr).toMatch(/already exists/);
     });
   });
+
+  it("asks for the confluence variables it was pointed at", async () => {
+    await withDir(async (dir) => {
+      await writeFile(
+        join(dir, "skill-sources.yml"),
+        `version: 1
+sources:
+  - skill: a
+    upstream:
+      - type: confluence
+        uri: https://x.atlassian.net/wiki/spaces/ENG/pages/1/T
+        last-reviewed: "3"
+`,
+      );
+      const res = await runCli(
+        [
+          "check",
+          "--confluence-email-env",
+          "SYNC_CONFLUENCE_EMAIL",
+          "--confluence-token-env",
+          "SYNC_CONFLUENCE_TOKEN",
+        ],
+        dir,
+      );
+      expect(res.code).toBe(2);
+      expect(res.stdout).toContain("SYNC_CONFLUENCE_TOKEN");
+      expect(res.stdout).not.toContain("CONFLUENCE_API_TOKEN");
+    });
+  }, 60_000);
 
   it("emits valid json even when a source errors", async () => {
     await withDir(async (dir) => {

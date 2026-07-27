@@ -70,7 +70,11 @@ Bitbucket and self-hosted servers all work over SSH or HTTPS with the
 credentials you already have, and no token to configure. The marker is
 file-level, so unrelated commits to the repository do not raise false drift.
 
-`confluence` needs `CONFLUENCE_EMAIL` and `CONFLUENCE_API_TOKEN`.
+`confluence` needs `CONFLUENCE_EMAIL` and `CONFLUENCE_API_TOKEN`. If your
+pipeline already holds those credentials under other names, point at them with
+`--confluence-email-env SYNC_CONFLUENCE_EMAIL --confluence-token-env
+SYNC_CONFLUENCE_TOKEN` rather than renaming your secrets. The flags take the
+name of a variable, not its value, so the token never reaches the command line.
 
 ## Commands
 

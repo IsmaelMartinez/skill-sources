@@ -182,8 +182,7 @@ describe("confluence resolver", () => {
 
   it("returns the page version as the marker", async () => {
     const resolver = createConfluenceResolver({
-      email: "a@b.c",
-      token: "t",
+      env: { CONFLUENCE_EMAIL: "a@b.c", CONFLUENCE_API_TOKEN: "t" },
       fetchImpl: async () =>
         response({ body: JSON.stringify({ version: { number: 27 } }) }),
     });
@@ -194,14 +193,46 @@ describe("confluence resolver", () => {
   });
 
   it("explains itself when credentials are missing", async () => {
-    const resolver = createConfluenceResolver({
-      email: undefined,
-      token: undefined,
-    });
+    const resolver = createConfluenceResolver({ env: {} });
     await expect(
       resolver.resolve({
         uri: "https://x.atlassian.net/wiki/spaces/ENG/pages/1/T",
       }),
     ).rejects.toThrow(/CONFLUENCE_EMAIL/);
+  });
+
+  it("takes credentials from the variables it is told to read", async () => {
+    let authorization;
+    const resolver = createConfluenceResolver({
+      env: { SYNC_CONFLUENCE_EMAIL: "a@b.c", SYNC_CONFLUENCE_TOKEN: "t" },
+      emailVar: "SYNC_CONFLUENCE_EMAIL",
+      tokenVar: "SYNC_CONFLUENCE_TOKEN",
+      fetchImpl: async (_url, init) => {
+        authorization = init.headers.Authorization;
+        return response({ body: JSON.stringify({ version: { number: 3 } }) });
+      },
+    });
+
+    expect(
+      await resolver.resolve({
+        uri: "https://x.atlassian.net/wiki/spaces/ENG/pages/1/T",
+      }),
+    ).toBe("3");
+    expect(authorization).toBe(
+      `Basic ${Buffer.from("a@b.c:t").toString("base64")}`,
+    );
+  });
+
+  it("names the configured variables when they are empty", async () => {
+    const resolver = createConfluenceResolver({
+      env: {},
+      emailVar: "SYNC_CONFLUENCE_EMAIL",
+      tokenVar: "SYNC_CONFLUENCE_TOKEN",
+    });
+    await expect(
+      resolver.resolve({
+        uri: "https://x.atlassian.net/wiki/spaces/ENG/pages/1/T",
+      }),
+    ).rejects.toThrow(/SYNC_CONFLUENCE_EMAIL and SYNC_CONFLUENCE_TOKEN/);
   });
 });

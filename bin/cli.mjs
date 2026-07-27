@@ -7,7 +7,13 @@ import {
   writeMarkers,
   UserError,
 } from "../src/manifest.js";
-import { resolveAll, summarise, exitCodeFor } from "../src/check.js";
+import {
+  resolveAll,
+  defaultResolvers,
+  summarise,
+  exitCodeFor,
+} from "../src/check.js";
+import { createConfluenceResolver } from "../src/resolvers/confluence.js";
 
 const HELP = `skill-sources — detect when the documents a skill derives from have moved
 
@@ -19,6 +25,12 @@ Usage
 
 Options
   -m, --manifest <path>   Manifest to read (default: ${DEFAULT_MANIFEST})
+      --confluence-email-env <name>
+                          Variable holding the Confluence account email
+                          (default: CONFLUENCE_EMAIL)
+      --confluence-token-env <name>
+                          Variable holding the Confluence API token
+                          (default: CONFLUENCE_API_TOKEN)
       --json              Machine-readable output
   -h, --help              Show this help
 
@@ -63,7 +75,14 @@ async function main(argv) {
     return 0;
   }
 
-  const results = await resolveAll(entries);
+  const results = await resolveAll(entries, {
+    resolvers: defaultResolvers({
+      confluence: createConfluenceResolver({
+        emailVar: args.confluenceEmailVar,
+        tokenVar: args.confluenceTokenVar,
+      }),
+    }),
+  });
   const counts = summarise(results);
 
   if (args.command === "seed") {
@@ -126,6 +145,8 @@ function render(results, counts) {
 function parse(argv) {
   const args = {
     manifest: DEFAULT_MANIFEST,
+    confluenceEmailVar: undefined,
+    confluenceTokenVar: undefined,
     json: false,
     help: false,
     command: null,
@@ -134,19 +155,27 @@ function parse(argv) {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") args.help = true;
     else if (arg === "--json") args.json = true;
-    else if (arg === "-m" || arg === "--manifest") {
-      // A flag that silently keeps its default is worse than one that stops:
-      // `--jsonn` in CI would quietly report human text and be believed.
-      const value = argv[++i];
-      if (!value || value.startsWith("-")) {
-        throw new UserError(`${arg} needs a path`);
-      }
-      args.manifest = value;
-    } else if (arg.startsWith("-"))
+    else if (arg === "-m" || arg === "--manifest")
+      args.manifest = requireValue(arg, argv[++i], "a path");
+    else if (arg === "--confluence-email-env")
+      args.confluenceEmailVar = requireValue(arg, argv[++i], "a variable name");
+    else if (arg === "--confluence-token-env")
+      args.confluenceTokenVar = requireValue(arg, argv[++i], "a variable name");
+    // A flag that silently keeps its default is worse than one that stops:
+    // `--jsonn` in CI would quietly report human text and be believed.
+    else if (arg.startsWith("-"))
       throw new UserError(`Unknown option '${arg}'`);
     else if (!args.command) args.command = arg;
   }
   return args;
+}
+
+/** The next argument, unless it is missing or is itself a flag. */
+function requireValue(arg, value, what) {
+  if (!value || value.startsWith("-")) {
+    throw new UserError(`${arg} needs ${what}`);
+  }
+  return value;
 }
 
 try {
