@@ -121,21 +121,31 @@ on:
 jobs:
   drift:
     runs-on: ubuntu-latest
+    # The workflow token is read-only by default, and opening the pull request
+    # also needs "Allow GitHub Actions to create and approve pull requests" in
+    # the repository or organisation settings.
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # Only needed for a private upstream. Omit for public ones.
+      # Only needed for a private upstream. Omit for public ones. Scoped to the
+      # upstream org, so this does not rewrite the URL of the repository being
+      # checked out or the one the pull request is pushed to.
       - name: Authenticate to the upstream
         env:
           UPSTREAM_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
         run: |
           git config --global \
-            url."https://x-access-token:${UPSTREAM_TOKEN}@github.com/".insteadOf \
-            "https://github.com/"
+            url."https://x-access-token:${UPSTREAM_TOKEN}@github.com/upstream-org/".insteadOf \
+            "https://github.com/upstream-org/"
 
+      # Both steps fail by design — check on drift, seed when it leaves a gone
+      # path alone — and the pull request is the whole point of the run.
       - run: npx skill-sources check --json > drift.json
         continue-on-error: true
         env:
@@ -143,6 +153,7 @@ jobs:
           CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
 
       - run: npx skill-sources seed
+        continue-on-error: true
         env:
           CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
           CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
@@ -177,7 +188,8 @@ skill-sources:
   before_script:
     # A masked variable holding a token with read_repository on the repository
     # being watched, not on this one. CONFLUENCE_* are masked variables too.
-    - git config --global url."https://oauth2:${UPSTREAM_TOKEN}@gitlab.com/".insteadOf "https://gitlab.com/"
+    # Scoped to the upstream group so the job's own checkout is left alone.
+    - git config --global url."https://oauth2:${UPSTREAM_TOKEN}@gitlab.com/upstream-group/".insteadOf "https://gitlab.com/upstream-group/"
   script:
     - npx skill-sources check --json > drift.json
   artifacts:
