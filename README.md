@@ -80,7 +80,7 @@ name of a variable, not its value, so the token never reaches the command line.
 
 | Command | Does |
 | --- | --- |
-| `check` | Report drift. Exit 1 on drift, an unreviewed source or a path that is gone, 2 on error. |
+| `check` | Report drift. Exit 1 on drift, an unreviewed source, a path that is gone or a skill that is not on disk; 2 on error. |
 | `report` | Same output, always exit 0. |
 | `seed` | Record current markers into the manifest. |
 | `init` | Write a starter manifest. |
