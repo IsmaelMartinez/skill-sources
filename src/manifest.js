@@ -80,11 +80,15 @@ export function validate(data, path = DEFAULT_MANIFEST) {
         throw new UserError(`${at} is a ${up.type} source missing 'uri'`);
       }
 
+      // An absent marker and the empty string the init template leaves both
+      // mean "never reviewed"; normalised here so downstream tests one value.
+      const marker = up["last-reviewed"] ?? null;
       entries.push({
         skill: entry.skill,
         index: [i, j],
+        key: `${i}.${j}`,
         upstream: up,
-        recorded: up["last-reviewed"] ?? null,
+        recorded: marker === "" ? null : marker,
       });
     });
   });

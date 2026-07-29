@@ -14,7 +14,6 @@ import {
   summarise,
   exitCodeFor,
 } from "../src/check.js";
-import { createConfluenceResolver } from "../src/resolvers/confluence.js";
 import { unknownSkills } from "../src/skills.js";
 
 const HELP = `skill-sources — detect when the documents a skill derives from have moved
@@ -60,7 +59,7 @@ async function main(argv) {
   const args = parse(argv);
   if (args.help || !args.command) {
     process.stdout.write(HELP);
-    return args.command ? 0 : args.help ? 0 : 1;
+    return args.help ? 0 : 1;
   }
 
   if (args.command === "init") return init(args);
@@ -78,22 +77,19 @@ async function main(argv) {
     ? await unknownSkills(entries, dirname(args.manifest), args.verifySkills)
     : [];
 
-  if (entries.length === 0) {
-    if (!args.json)
-      process.stdout.write(`No sources declared in ${args.manifest}.\n`);
-    else
-      process.stdout.write(
-        `${JSON.stringify({ results: [], counts: summarise([]), unknownSkills: [] })}\n`,
-      );
+  // Machine consumers fall through: the normal path already produces the
+  // right JSON for an empty manifest.
+  if (entries.length === 0 && !args.json) {
+    process.stdout.write(`No sources declared in ${args.manifest}.\n`);
     return 0;
   }
 
   const results = await resolveAll(entries, {
     resolvers: defaultResolvers({
-      confluence: createConfluenceResolver({
+      confluence: {
         emailVar: args.confluenceEmailVar,
         tokenVar: args.confluenceTokenVar,
-      }),
+      },
     }),
   });
   const counts = summarise(results);
@@ -151,18 +147,11 @@ async function init(args) {
 function render(results, counts) {
   const lines = [];
   const order = { drifted: 0, missing: 1, unreviewed: 2, error: 3, fresh: 4 };
-  const label = {
-    drifted: "drifted   ",
-    missing: "missing   ",
-    unreviewed: "unreviewed",
-    error: "error     ",
-    fresh: "fresh     ",
-  };
 
   for (const r of [...results].sort(
     (a, b) => order[a.status] - order[b.status],
   )) {
-    lines.push(`  ${label[r.status]} ${r.skill}  ${r.source}`);
+    lines.push(`  ${r.status.padEnd(10)} ${r.skill}  ${r.source}`);
     if (r.status === "drifted")
       lines.push(`               ${r.recorded} -> ${r.current}`);
     if (r.status === "missing")

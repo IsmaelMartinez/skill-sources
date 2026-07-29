@@ -49,7 +49,6 @@ export function createConfluenceResolver({
         throw new Error(`no version in response for ${upstream.uri}`);
       return String(version);
     },
-    async cleanup() {},
   };
 }
 
