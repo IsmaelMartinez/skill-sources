@@ -231,6 +231,12 @@ thing, and merge to move the baseline forward. Accepting an upstream change as
 irrelevant should be as cheap as acting on it — otherwise the gate gets routed
 around.
 
+## Design
+
+An overview of the moving parts, the trust posture and the failure semantics
+is in [ARCHITECTURE.md](ARCHITECTURE.md); the decisions behind them are
+recorded in [docs/adr](docs/adr/README.md).
+
 ## Related work
 
 [`skill-drift`](https://github.com/coskunarif/skill-drift) detects skills gone
