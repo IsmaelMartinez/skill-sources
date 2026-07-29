@@ -14,7 +14,7 @@ specified in [CONVENTION.md](CONVENTION.md).
 flowchart LR
     dev([Developer or CI job]) -->|runs| cli[skill-sources CLI]
     cli -->|reads / seeds markers| manifest[(skill-sources.yml)]
-    cli -->|git clone, blobless| hosts[Git hosts\nGitHub / GitLab / self-hosted]
+    cli -->|git clone, blobless| hosts["Git hosts<br/>GitHub / GitLab / self-hosted"]
     cli -->|HEAD / GET| web[Plain web documents]
     cli -->|REST, basic auth| conf[Confluence]
     cli -.->|verify-skills| dirs[(Skill directories)]
