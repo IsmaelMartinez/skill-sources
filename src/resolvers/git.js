@@ -25,14 +25,15 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
   const dirs = [];
 
   async function clone(repo, ref) {
-    const dir = await mkdtemp(join(tmpdir(), "skill-sources-"));
-    dirs.push(dir);
     const base = ["clone", "--filter=blob:none", "--no-checkout", "--quiet"];
 
-    // `--branch` only accepts a branch or tag name. A ref pinned to a commit,
-    // or one that lives outside the default branch, needs the wider clone, so
-    // the narrow attempt is tried first and widened only when it fails.
-    if (ref) {
+    // `--branch` only accepts a branch or tag name. A ref pinned to a commit
+    // can only come from the wider clone, so the narrow attempt would fail by
+    // construction and is skipped rather than tried; anything else is tried
+    // narrow first and widened only when it fails.
+    if (ref && !looksLikeSha(ref)) {
+      const dir = await mkdtemp(join(tmpdir(), "skill-sources-"));
+      dirs.push(dir);
       try {
         await run(
           "git",
@@ -45,16 +46,13 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       } catch (err) {
         await rm(dir, { recursive: true, force: true });
 
-        // A commit SHA is the case widening exists for, and the remote will not
-        // advertise it, so there is nothing to ask. Anything else the remote can
-        // answer for directly — and a typo is not worth a full clone to find out
-        // that `git log` cannot resolve it either.
-        if (!looksLikeSha(ref)) {
-          const state = await remoteRefState(repo, ref, cloneTimeoutMs);
-          if (state === "absent")
-            throw new Error(`ref '${ref}' not found in ${repo}`);
-          if (state === "unreachable") throw cloneError(err, repo, ref);
-        }
+        // The remote can say directly whether the ref exists — a typo is not
+        // worth a full clone to find out that `git log` cannot resolve it
+        // either.
+        const state = await remoteRefState(repo, ref, cloneTimeoutMs);
+        if (state === "absent")
+          throw new Error(`ref '${ref}' not found in ${repo}`);
+        if (state === "unreachable") throw cloneError(err, repo, ref);
       }
     }
 
@@ -155,11 +153,12 @@ function readError(err, repo, ref) {
 }
 
 /**
- * Git object names, which no remote lists and only a wider clone can resolve.
+ * Git object names, which no remote lists and only a wider clone can resolve,
+ * so the narrow single-branch attempt is skipped for them entirely.
  *
- * A branch or tag named `cafebabe` is caught by this too. That costs nothing:
- * if it exists the narrow clone already succeeded and we never got here, and
- * if it does not, the only price is one wide clone before the same failure.
+ * A branch or tag named `cafebabe` is caught by this too. That costs almost
+ * nothing: the wide clone carries every branch and tag, so the ref resolves
+ * there just the same.
  */
 function looksLikeSha(ref) {
   return /^[0-9a-f]{7,40}$/i.test(ref);

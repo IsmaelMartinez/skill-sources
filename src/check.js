@@ -3,12 +3,12 @@ import { createGitResolver } from "./resolvers/git.js";
 import { createUrlResolver } from "./resolvers/url.js";
 import { createConfluenceResolver } from "./resolvers/confluence.js";
 
-export function defaultResolvers(overrides = {}) {
+/** Per-type factory options, so callers never import a resolver directly. */
+export function defaultResolvers(options = {}) {
   return {
-    git: createGitResolver(),
-    url: createUrlResolver(),
-    confluence: createConfluenceResolver(),
-    ...overrides,
+    git: createGitResolver(options.git),
+    url: createUrlResolver(options.url),
+    confluence: createConfluenceResolver(options.confluence),
   };
 }
 
@@ -50,7 +50,7 @@ async function resolveOne(entry, resolvers) {
     skill: entry.skill,
     source: describe(entry.upstream),
     type: entry.upstream.type,
-    key: entry.index.join("."),
+    key: entry.key,
     recorded: entry.recorded,
   };
 
@@ -72,11 +72,7 @@ async function resolveOne(entry, resolvers) {
     }
 
     const current = await resolver.resolve(entry.upstream);
-    if (
-      entry.recorded === null ||
-      entry.recorded === undefined ||
-      entry.recorded === ""
-    ) {
+    if (entry.recorded === null) {
       // Nothing to compare against yet: reported separately from drift so a
       // half-populated manifest doesn't masquerade as everything being fine.
       return { ...base, current, status: "unreviewed" };

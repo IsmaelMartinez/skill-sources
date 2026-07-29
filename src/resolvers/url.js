@@ -32,7 +32,6 @@ export function createUrlResolver({ fetchImpl = fetch } = {}) {
       const body = await res.text();
       return `sha256:${createHash("sha256").update(body).digest("hex")}`;
     },
-    async cleanup() {},
   };
 }
 
