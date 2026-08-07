@@ -34,6 +34,10 @@ jobs:
       # Trusted publishing needs npm 11.5.1+. Node 24 bundles npm 11, so the
       # global npm upgrade this step used to do is no longer needed; dropping
       # back below Node 24 would reintroduce it.
-      - run: npm ci
+      # No lifecycle scripts. This job holds id-token: write, so a postinstall
+      # anywhere in the dev tree could mint an npm publish credential for this
+      # package and ship a tarball carrying a genuine provenance attestation.
+      # Nothing here needs install scripts; the suite passes without them.
+      - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm publish --provenance --access public

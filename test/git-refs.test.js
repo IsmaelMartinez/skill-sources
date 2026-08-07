@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -107,6 +108,25 @@ describe("git resolver — refs beyond a branch name", () => {
     expect(await remoteRefState("/nonexistent/repo.git", "main")).toBe(
       "unreachable",
     );
+  }, 60_000);
+
+  // A manifest supplies names, and a name that begins with a dash is still a
+  // name. Asserted as a property rather than against one command: today the
+  // clone gate rejects it first, but `git log --output=` would write the file
+  // if a ref ever reached it, which is what the `--end-of-options` separators
+  // are there to prevent when issue #17 restructures that gate.
+  it("treats a ref that looks like a flag as a name, not an option", async () => {
+    const resolver = createGitResolver();
+    const target = join(dir, "written-by-an-option");
+    try {
+      const err = await resolver
+        .resolve({ repo: dir, path: "doc.md", ref: `--output=${target}` })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(existsSync(target)).toBe(false);
+    } finally {
+      await resolver.cleanup();
+    }
   }, 60_000);
 
   it("reports an unreachable repository even when the ref is a sha", async () => {

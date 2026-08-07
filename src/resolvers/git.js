@@ -24,6 +24,13 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
   const clones = new Map();
   const dirs = [];
 
+  // Every git invocation below separates options from manifest-supplied values,
+  // with `--` where the command documents it and `--end-of-options` where a
+  // revision sits ahead of the pathspec. Nothing in the manifest is treated as
+  // an option, so a `repo` or `ref` beginning with a dash is a bad name rather
+  // than a flag. Today the clone gate happens to reject those before they reach
+  // `git log`; that is incidental, and issue #17 proposes restructuring exactly
+  // that gate, so the separators are what actually holds the property.
   async function clone(repo, ref) {
     const base = ["clone", "--filter=blob:none", "--no-checkout", "--quiet"];
 
@@ -37,7 +44,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       try {
         await run(
           "git",
-          [...base, "--branch", ref, "--single-branch", repo, dir],
+          [...base, "--branch", ref, "--single-branch", "--", repo, dir],
           {
             timeout: cloneTimeoutMs,
           },
@@ -59,7 +66,9 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
     const wider = await mkdtemp(join(tmpdir(), "skill-sources-"));
     dirs.push(wider);
     try {
-      await run("git", [...base, repo, wider], { timeout: cloneTimeoutMs });
+      await run("git", [...base, "--", repo, wider], {
+        timeout: cloneTimeoutMs,
+      });
     } catch (err) {
       throw cloneError(err, repo, ref);
     }
@@ -84,7 +93,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       // Naming the ref explicitly keeps the narrow and wide clones equivalent:
       // in the narrow case it is the checked-out branch, in the wide case it is
       // the only thing distinguishing this entry from the default branch.
-      const args = ["log", "-1", "--format=%H"];
+      const args = ["log", "-1", "--format=%H", "--end-of-options"];
       if (ref) args.push(ref);
       args.push("--", path);
 
@@ -125,7 +134,15 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       try {
         const { stdout } = await run(
           "git",
-          ["ls-tree", "-r", "--name-only", ref ?? "HEAD", "--", path],
+          [
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "--end-of-options",
+            ref ?? "HEAD",
+            "--",
+            path,
+          ],
           { cwd: dir, timeout: cloneTimeoutMs },
         );
         return stdout.trim() !== "";
@@ -171,7 +188,13 @@ function looksLikeSha(ref) {
  */
 export async function remoteRefState(repo, ref, timeout = 120_000) {
   try {
-    await run("git", ["ls-remote", "--exit-code", repo, ref], { timeout });
+    await run(
+      "git",
+      ["ls-remote", "--exit-code", "--end-of-options", repo, ref],
+      {
+        timeout,
+      },
+    );
     return "present";
   } catch (err) {
     return err?.code === 2 ? "absent" : "unreachable";
