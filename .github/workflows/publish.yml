@@ -20,16 +20,17 @@ jobs:
     steps:
       # Full history: the test suite uses this repo's own log as a fixture
       # and hangs against a shallow checkout (see test.yml).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1+; Node 22 bundles npm 10.
-      - run: npm install -g npm@11
+      # Trusted publishing needs npm 11.5.1+. Node 24 bundles npm 11, so the
+      # global npm upgrade this step used to do is no longer needed; dropping
+      # back below Node 24 would reintroduce it.
       - run: npm ci
       - run: npm test
       - run: npm publish --provenance --access public

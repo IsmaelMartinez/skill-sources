@@ -153,10 +153,10 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       # Only needed for a private upstream. Omit for public ones. Scoped to the
       # upstream org, so this does not rewrite the URL of the repository being
@@ -183,7 +183,7 @@ jobs:
           CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
           CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
 
-      - uses: peter-evans/create-pull-request@v6
+      - uses: peter-evans/create-pull-request@v8
         with:
           title: "Upstream sources have moved"
           body-path: drift.json
@@ -207,7 +207,7 @@ upstream host to `known_hosts` before the check step:
 
 ```yaml
 skill-sources:
-  image: node:22
+  image: node:24
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   before_script:
