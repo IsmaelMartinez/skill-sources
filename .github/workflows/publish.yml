@@ -5,11 +5,14 @@ on:
     types: [published]
   workflow_dispatch:
 
-# OIDC-first: with a trusted publisher configured on npmjs.com for this
-# repo + workflow file, npm authenticates via the Actions OIDC token and no
-# npm token secret is needed. Trusted publishing cannot create a package,
-# so the first-ever publish bootstraps with a short-lived granular token in
-# the NPM_TOKEN secret; delete the secret once the trusted publisher is set.
+# Authentication is OIDC only: npmjs.com has a trusted publisher configured
+# against this repo and this workflow filename, so npm exchanges the Actions
+# OIDC token for a short-lived one and no npm token secret exists.
+#
+# Renaming this file breaks publishing until the trusted publisher is updated
+# to match, because the filename is part of what npm matches on. A new package
+# cannot be published this way at all — trusted publishing cannot create one,
+# so a first publish still needs a temporary granular token (npm/cli#8544).
 permissions:
   contents: read
   id-token: write
@@ -34,6 +37,3 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm publish --provenance --access public
-        env:
-          # Empty once the bootstrap secret is deleted; npm tries OIDC first.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
