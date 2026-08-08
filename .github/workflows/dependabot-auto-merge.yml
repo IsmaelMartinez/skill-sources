@@ -21,25 +21,14 @@ jobs:
       # checks, so gh finds the PR immediately mergeable and merges it there
       # and then instead of queueing it behind CI. Everything this step lets
       # through therefore lands on main with no human and no green build.
-      # Nothing ships as a consequence of that merge — publish.yml only runs
-      # when a human cuts a release — but it does run the merged code: `npm
-      # ci` and `npm test` execute inside that job while it holds
-      # id-token: write. `files:` in package.json governs what reaches the
-      # tarball, not what executes in CI, so a dev or transitive bump still
-      # gets to run next to the OIDC identity.
       #
-      # The patch-only gate is therefore the one doing the real work: a minor
-      # bump is new upstream code riding on a semver promise the ecosystem
-      # keeps unevenly and a compromised maintainer does not keep at all.
-      # Excluding direct:production is secondary — a second look at `yaml`,
-      # the one dependency whose bytes actually ship. Together they narrow
-      # the blast radius rather than close it; required status checks on main
-      # are the actual fix, and this is a stopgap until those exist.
-      #
-      # Until PR #23 lands there is no .github/dependabot.yml, so the only
-      # PRs this sees are GitHub's automated security fixes — patch-only
-      # means a minor or major one now waits for a human. Nothing is blocked
-      # here, only slowed to a manual merge.
+      # The patch-only gate is the one doing the real work: a minor bump is
+      # new upstream code riding on a semver promise the ecosystem keeps
+      # unevenly and a compromised maintainer does not keep at all. Excluding
+      # direct:production is secondary — a second look at `yaml`, the one
+      # dependency whose bytes actually ship. Together they narrow the blast
+      # radius rather than close it; required status checks on main are the
+      # actual fix, and this is a stopgap until those exist.
       - name: Auto-merge patch updates to non-shipping dependencies
         if: |
           steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
