@@ -1,0 +1,29 @@
+# A repository whose skills are nested inside plugins, rather than sitting in
+# one flat directory. The manifest itself does not change shape — `skill` is
+# still just the directory name — but the glob you hand `--verify-skills` has
+# to match the depth your layout actually has:
+#
+#     skill-sources check -m examples/nested-layout.yml \
+#       --verify-skills 'plugins/*/skills/*'
+#
+# There is no `**`. A run of stars means the same as one star, and `*` never
+# crosses a path separator, so the depth of the glob is the depth of the tree.
+# That is deliberate: the matcher is linear-time by construction, and a pattern
+# that cannot express arbitrary depth cannot backtrack (see docs/adr/0006).
+version: 1
+sources:
+  - skill: event-structure
+    upstream:
+      - type: git
+        repo: https://github.com/example/standards.git
+        path: rfcs/rfc-0059-events.md
+        ref: main
+        last-reviewed: ae408acae79bf58e086d6c86a9f12408b760b188
+
+  - skill: terraform-standards
+    upstream:
+      - type: git
+        repo: https://github.com/example/standards.git
+        path: rfcs/rfc-0021-terraform.md
+        ref: main
+        last-reviewed: 5040059ba1c8e7f2d6a94b03e18c7f5209d3b6ea

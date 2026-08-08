@@ -1,0 +1,37 @@
+# Every source type, and the two shapes worth seeing beyond the minimal case:
+# a skill that derives from more than one document, and an entry nobody has
+# reviewed yet.
+version: 1
+sources:
+  # Two upstreams for one skill. Drift in either one is reported separately, so
+  # a change to the wiki page does not implicate the RFC.
+  - skill: event-structure
+    upstream:
+      - type: git
+        repo: https://github.com/example/standards.git
+        path: rfcs/rfc-0059-events.md
+        ref: main
+        last-reviewed: ae408acae79bf58e086d6c86a9f12408b760b188
+
+      - type: confluence
+        uri: https://example.atlassian.net/wiki/spaces/ENG/pages/12345/Event+envelope
+        last-reviewed: "27"
+
+  # A published page with no repository behind it. The marker is whatever the
+  # server will commit to — a strong ETag if it offers one, otherwise
+  # Last-Modified, otherwise a hash of the body.
+  - skill: aws-tagging
+    upstream:
+      - type: url
+        uri: https://example.com/handbook/tagging
+        last-reviewed: "sha256:9f2b1c4e8a7d3f60b512c9a4e7d81f3b6c0a95d27e4f8b13a6c5d09e7f2b4a18"
+
+  # No `last-reviewed` yet. `check` exits 1 on this rather than passing it: a
+  # missing marker is not evidence the skill is current, only that nobody has
+  # said so. Run `seed` to record what is there today and start the clock.
+  - skill: incident-response
+    upstream:
+      - type: git
+        repo: https://github.com/example/runbooks.git
+        path: incidents/severity.md
+        ref: v2.1.0

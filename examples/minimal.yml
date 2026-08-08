@@ -1,0 +1,14 @@
+# The smallest manifest that does anything: one skill, one upstream document.
+#
+# `ref` is optional and defaults to whatever the remote's HEAD is. Naming it is
+# usually worth the line, because a skill distilled from a branch that moves is
+# a different proposition from one pinned to a tag.
+version: 1
+sources:
+  - skill: event-structure
+    upstream:
+      - type: git
+        repo: https://github.com/example/standards.git
+        path: rfcs/rfc-0059-events.md
+        ref: main
+        last-reviewed: ae408acae79bf58e086d6c86a9f12408b760b188
