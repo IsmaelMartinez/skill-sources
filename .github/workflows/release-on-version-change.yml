@@ -132,7 +132,7 @@ jobs:
 
       - name: Trigger publish.yml
         if: steps.decide.outputs.release == 'true'
-        # WHY THIS STEP EXISTS AT ALL — do not "simplify" it away.
+        # Not redundant with the release event above, despite appearances.
         #
         # publish.yml triggers on `release: [published]`, so the obvious read
         # is that the step above already started it. It did not. GitHub
