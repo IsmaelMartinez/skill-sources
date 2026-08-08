@@ -1,0 +1,20 @@
+# The one example here that resolves for real. Everything else in this
+# directory uses illustrative addresses; this points at a public repository, so
+# `report` against it does the actual work — clone, find the last commit that
+# touched the path, compare against the marker below.
+#
+# The upstream is the Agent Skills specification, which is a fair stand-in for
+# the thing this convention exists for: a document someone else owns, that a
+# skill might distil, and that will move without telling you.
+#
+# Expect `fresh` until the specification changes, then `drifted`. That is the
+# whole tool, demonstrated in one entry.
+version: 1
+sources:
+  - skill: agent-skills-frontmatter
+    upstream:
+      - type: git
+        repo: https://github.com/agentskills/agentskills.git
+        path: docs/specification.mdx
+        ref: main
+        last-reviewed: 217be548739f21d6008915c29aefe320ea1a90af
