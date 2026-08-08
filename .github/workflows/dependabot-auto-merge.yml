@@ -17,8 +17,22 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge on non-major updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+      # `--auto` is a misnomer on this repo: main has no required status
+      # checks, so gh finds the PR immediately mergeable and merges it there
+      # and then instead of queueing it behind CI. Everything this step lets
+      # through therefore lands on main with no human and no green build.
+      #
+      # The patch-only gate is the one doing the real work: a minor bump is
+      # new upstream code riding on a semver promise the ecosystem keeps
+      # unevenly and a compromised maintainer does not keep at all. Excluding
+      # direct:production is secondary — a second look at `yaml`, the one
+      # dependency whose bytes actually ship. Together they narrow the blast
+      # radius rather than close it; required status checks on main are the
+      # actual fix, and this is a stopgap until those exist.
+      - name: Auto-merge patch updates to non-shipping dependencies
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
+          steps.metadata.outputs.dependency-type != 'direct:production'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
