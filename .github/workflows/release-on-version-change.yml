@@ -20,9 +20,10 @@ permissions:
   contents: write
   actions: write
 
-# Two pushes landing on main seconds apart would both pass the registry check
-# before either created a tag, and the loser would die on an existing tag.
-# Serialise instead; never cancel, because a cancelled run is a lost release.
+# Two pushes landing on main seconds apart would both see the version as
+# unpublished and both dispatch a publish for it, and the loser's publish
+# would die on the registry rejecting a version that now exists. Serialise
+# instead; never cancel, because a cancelled run is a lost release.
 concurrency:
   group: release-on-version-change
   cancel-in-progress: false
@@ -31,51 +32,69 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # Two commits and no more: the entire decision is "did the version field
-      # differ from the commit this one replaced on main?", which needs HEAD
-      # and HEAD~1 and nothing else. No npm install or build happens here, so
-      # the runner's preinstalled Node and npm are enough — no setup-node.
+      # A shallow checkout is all this needs: the decision below reads one
+      # field out of the working tree's package.json and asks the registry
+      # about it, so no history is consulted. No npm install or build happens
+      # here either, so the runner's preinstalled Node and npm are enough —
+      # no setup-node.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
 
       - name: Decide whether this push carries a releasable version bump
         id: decide
         run: |
           set -euo pipefail
 
+          # Both halves of the registry coordinate come from the manifest. A
+          # hardcoded name would outlive a rename without complaining: every
+          # lookup would ask about the package this repo used to be, answer
+          # "unpublished" forever, and cheerfully release over versions the
+          # new name already has.
+          NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
 
-          # HEAD~1 rather than the push event's `before` SHA: `before` is a
-          # zero SHA on branch creation and points somewhere unrelated after a
-          # force-push, whereas HEAD~1 is always the commit this one replaced.
-          # The `|| true` covers the (never, in practice) root-commit case; an
-          # empty previous version reads as "changed" and the registry check
-          # below is what actually decides.
-          git show HEAD~1:package.json > "$RUNNER_TEMP/previous-package.json" || true
-          PREVIOUS=$(node -p "require('$RUNNER_TEMP/previous-package.json').version" 2>/dev/null || true)
+          # The registry is the whole decision, and deliberately so. The
+          # tempting alternative — diffing the version against the previous
+          # commit — answers a question that only resembles the one that
+          # matters: a push carrying several commits leaves the bump buried
+          # behind its followers, so both ends of the diff already read the
+          # new version and the release is silently skipped. Git archaeology
+          # in general ("is there a tag?", "was this commit released?")
+          # answers differently under squash-versus-merge, a force-push that
+          # replays the bump, and a re-run of this very workflow. "Is this
+          # version already public?" answers all of those identically, and it
+          # is the only question with consequences — a version already on npm
+          # can never be published again. An unchanged version therefore needs
+          # no special case: it is by definition one that already went out.
+          #
+          # npm separates the two outcomes precisely. A published version
+          # exits zero and prints itself; an unpublished version — or a
+          # package with no releases at all, which is the same answer for our
+          # purposes — exits non-zero with E404 in its error output. Anything
+          # else is the registry being unreachable or unwell rather than an
+          # answer, and a failed lookup must never read as "not published":
+          # that tags and re-announces a release that already shipped. So
+          # anything unrecognised aborts the job and asks for a human, which
+          # is the safe direction to be wrong in.
+          NPM_ERR="$RUNNER_TEMP/npm-view.err"
+          if PUBLISHED=$(npm view "$NAME@$VERSION" version 2>"$NPM_ERR"); then
+            NPM_STATUS=0
+          else
+            NPM_STATUS=$?
+          fi
 
-          if [ "$VERSION" = "$PREVIOUS" ]; then
-            echo "version unchanged at $VERSION — batching, nothing to release"
+          if [ "$NPM_STATUS" -eq 0 ] && [ -n "$PUBLISHED" ]; then
+            echo "$VERSION is already on the registry — batching, nothing to release"
             echo "release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # The npm registry, not git history, is the idempotency check. Git
-          # archaeology ("is there a tag?", "was this commit released?") gives
-          # a different answer depending on squash-vs-merge, on a force-push
-          # replaying the bump commit, and on a re-run of this very workflow.
-          # "Is this version already public?" gives the same answer to all of
-          # them, and it is the question that actually matters — a version
-          # already on npm can never be published again.
-          PUBLISHED=$(npm view "skill-sources@$VERSION" version 2>/dev/null || true)
-          if [ "$PUBLISHED" = "$VERSION" ]; then
-            echo "$VERSION is already on the registry — nothing to release"
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if ! grep -q 'E404' "$NPM_ERR"; then
+            echo "npm could not say whether $NAME@$VERSION is published (exit $NPM_STATUS); refusing to guess:" >&2
+            cat "$NPM_ERR" >&2
+            exit 1
           fi
 
-          echo "version moved $PREVIOUS -> $VERSION and is unpublished — releasing"
+          echo "$VERSION is not on the registry — releasing"
           echo "release=true" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -92,6 +111,18 @@ jobs:
           VERSION: ${{ steps.decide.outputs.version }}
         run: |
           set -euo pipefail
+          # Creating the release is the one step here that is not naturally
+          # repeatable: gh fails outright if a release for the tag exists, and
+          # a run that tagged and then died before dispatching would be stuck
+          # failing forever on its own leftovers. The registry decides whether
+          # this version ships; an existing release is only evidence that a
+          # previous attempt got this far, so adopt it and carry on to the
+          # dispatch rather than treating it as an error.
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "release v$VERSION already exists — reusing it and moving on to the dispatch"
+            exit 0
+          fi
+
           # gh creates the tag at --target as part of creating the release, so
           # there is no separate `git tag && git push` to keep in step.
           gh release create "v$VERSION" \
