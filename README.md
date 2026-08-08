@@ -24,7 +24,8 @@ judgement, so drift opens a review rather than a patch.
 
 ## Install
 
-Nothing to install — it runs from `npx`, and needs Node 20+.
+Nothing to install — it runs from `npx`, and needs Node 20+. Git sources also
+need git 2.24+, which is where `--end-of-options` arrived.
 
 ```console
 $ npx skill-sources init      # write a starter manifest

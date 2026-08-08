@@ -139,7 +139,10 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
             "-r",
             "--name-only",
             "--end-of-options",
-            ref ?? "HEAD",
+            // `||`, not `??`: resolve() drops a ref of "" and falls back to
+            // HEAD, and handing ls-tree that same empty string instead would
+            // fail the source on "not a valid object name" rather than agree.
+            ref || "HEAD",
             "--",
             path,
           ],
@@ -165,7 +168,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
 /** Shared so `exists` and `resolve` report a bad ref the same sanitised way. */
 function readError(err, repo, ref) {
   return new Error(
-    `could not read '${ref ?? "HEAD"}' in ${repo}: ${gitReason(err)}`,
+    `could not read '${ref || "HEAD"}' in ${repo}: ${gitReason(err)}`,
   );
 }
 

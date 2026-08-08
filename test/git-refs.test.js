@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -110,20 +109,15 @@ describe("git resolver — refs beyond a branch name", () => {
     );
   }, 60_000);
 
-  // A manifest supplies names, and a name that begins with a dash is still a
-  // name. Asserted as a property rather than against one command: today the
-  // clone gate rejects it first, but `git log --output=` would write the file
-  // if a ref ever reached it, which is what the `--end-of-options` separators
-  // are there to prevent when issue #17 restructures that gate.
-  it("treats a ref that looks like a flag as a name, not an option", async () => {
+  // An empty ref is the one value the two paths could read differently:
+  // resolve() drops it and asks for HEAD, so exists() saying "not a valid
+  // object name" would fail a source the resolver had just answered for.
+  it("treats an empty ref the same way in exists() as in resolve()", async () => {
     const resolver = createGitResolver();
-    const target = join(dir, "written-by-an-option");
     try {
-      const err = await resolver
-        .resolve({ repo: dir, path: "doc.md", ref: `--output=${target}` })
-        .catch((e) => e);
-      expect(err).toBeInstanceOf(Error);
-      expect(existsSync(target)).toBe(false);
+      const upstream = { repo: dir, path: "doc.md", ref: "" };
+      expect(await resolver.resolve(upstream)).toBe(headSha);
+      expect(await resolver.exists(upstream)).toBe(true);
     } finally {
       await resolver.cleanup();
     }

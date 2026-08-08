@@ -24,8 +24,11 @@ as the trusted publisher exists.
 
 No long-lived npm credential exists anywhere, and every published version
 carries a public provenance attestation tying it to the exact workflow run
-and commit. The workflow needs `id-token: write` and npm ≥ 11.5.1 (installed
-in the job, as Node 22 bundles npm 10).
+and commit. The workflow needs `id-token: write` and npm ≥ 11.5.1, which the
+job installs rather than inferring from the Node version: npm 11.5.1 first
+shipped with Node 24.5.0, and asking `setup-node` for a bare major resolves
+against the runner's tool cache, so a 24.0–24.4 image would quietly supply
+npm 11.3.0 and fail authentication after the tag had already been cut.
 
 ## Alternatives considered
 

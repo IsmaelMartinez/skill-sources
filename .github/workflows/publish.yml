@@ -47,16 +47,17 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      # Trusted publishing needs npm 11.5.1+, which arrived in Node 24.5.0 —
-      # 24.0.0 shipped npm 11.3.0, so "Node 24" is not on its own enough. The
-      # bare `24` resolves to the newest 24.x, which is why the global npm
-      # upgrade this step used to do is gone. Pinning an exact Node below 24.5.0
-      # would bring it back.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
+      # Installed rather than inferred from the Node version. npm 11.5.1 is the
+      # floor for trusted publishing and first shipped in Node 24.5.0, but a
+      # bare major asks setup-node for whatever 24.x the runner image caches —
+      # a 24.0–24.4 image would hand over npm 11.3.0, and the failure would
+      # surface as an authentication error after the tag was already cut.
+      - run: npm install -g npm@11
       # Nothing third-party executes in this job: --ignore-scripts blocks
       # install hooks, and there are no prepare or prepack scripts for `npm
       # publish` to run. What is left is npm's own code and the tarball.
