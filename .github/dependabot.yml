@@ -1,0 +1,14 @@
+# Without this file nothing watches versions: the auto-merge workflow only
+# reacts to pull requests Dependabot opens, and it opens none until an
+# ecosystem is declared here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly

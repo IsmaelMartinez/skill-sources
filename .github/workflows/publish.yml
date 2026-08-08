@@ -5,34 +5,63 @@ on:
     types: [published]
   workflow_dispatch:
 
-# OIDC-first: with a trusted publisher configured on npmjs.com for this
-# repo + workflow file, npm authenticates via the Actions OIDC token and no
-# npm token secret is needed. Trusted publishing cannot create a package,
-# so the first-ever publish bootstraps with a short-lived granular token in
-# the NPM_TOKEN secret; delete the secret once the trusted publisher is set.
+# Authentication is OIDC only: npmjs.com has a trusted publisher configured
+# against this repo and this workflow filename, so npm exchanges the Actions
+# OIDC token for a short-lived one and no npm token secret exists.
+#
+# Renaming this file breaks publishing until the trusted publisher is updated
+# to match, because the filename is part of what npm matches on. A new package
+# cannot be published this way at all — trusted publishing cannot create one,
+# so a first publish still needs a temporary granular token (npm/cli#8544).
 permissions:
   contents: read
-  id-token: write
 
+# Split in two so the OIDC token is held by as little as possible. The suite is
+# what runs third-party code here — vitest and its tree are dev dependencies,
+# and Dependabot can land patch bumps to them without a human reading the diff.
+# Running that in a job that can mint an npm publish credential would mean any
+# one of those packages could publish as this package, with a provenance
+# attestation signed by the genuine workflow to prove it. So the tests run
+# unprivileged, and only the job that publishes gets id-token: write.
 jobs:
-  publish:
+  # Named for what it does rather than `test`, which test.yml already uses —
+  # two jobs of the same name read as "test / test" in the checks list.
+  verify:
     runs-on: ubuntu-latest
     steps:
       # Full history: the test suite uses this repo's own log as a fixture
       # and hangs against a shallow checkout (see test.yml).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1+; Node 22 bundles npm 10.
+      # Installed rather than inferred from the Node version. npm 11.5.1 is the
+      # floor for trusted publishing and first shipped in Node 24.5.0, but a
+      # bare major asks setup-node for whatever 24.x the runner image caches —
+      # a 24.0–24.4 image would hand over npm 11.3.0, and the failure would
+      # surface as an authentication error after the tag was already cut.
       - run: npm install -g npm@11
-      - run: npm ci
-      - run: npm test
+      # Nothing third-party executes in this job: --ignore-scripts blocks
+      # install hooks, and there are no prepare or prepack scripts for `npm
+      # publish` to run. What is left is npm's own code and the tarball.
+      - run: npm ci --ignore-scripts
       - run: npm publish --provenance --access public
-        env:
-          # Empty once the bootstrap secret is deleted; npm tries OIDC first.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
