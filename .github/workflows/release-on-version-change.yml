@@ -1,0 +1,158 @@
+name: release-on-version-change
+
+# Releasing is driven by the version number, not by the act of merging. Most
+# pushes to main — docs, refactors, Dependabot bumps — carry no version change
+# and are meant to batch up silently until someone deliberately bumps
+# package.json. That bump is the release trigger, so the release ceremony
+# (tag + GitHub Release + publish) follows the version rather than the commit.
+on:
+  push:
+    branches: [main]
+
+# Minimum viable set:
+#   contents: write — `gh release create` creates both the git tag and the
+#                     GitHub Release; both are writes to repository contents.
+#   actions:  write — `gh workflow run` is a workflow_dispatch against the
+#                     Actions API, which is not a read-only call.
+# Deliberately absent: id-token (this workflow never touches npm — see the
+# dispatch step) and packages/pull-requests (nothing here reads or writes them).
+permissions:
+  contents: write
+  actions: write
+
+# Two pushes landing on main seconds apart would both see the version as
+# unpublished and both dispatch a publish for it, and the loser's publish
+# would die on the registry rejecting a version that now exists. Serialise
+# instead; never cancel, because a cancelled run is a lost release.
+concurrency:
+  group: release-on-version-change
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # A shallow checkout is all this needs: the decision below reads one
+      # field out of the working tree's package.json and asks the registry
+      # about it, so no history is consulted. No npm install or build happens
+      # here either, so the runner's preinstalled Node and npm are enough —
+      # no setup-node.
+      - uses: actions/checkout@v7
+
+      - name: Decide whether this push carries a releasable version bump
+        id: decide
+        run: |
+          set -euo pipefail
+
+          # Both halves of the registry coordinate come from the manifest. A
+          # hardcoded name would outlive a rename without complaining: every
+          # lookup would ask about the package this repo used to be, answer
+          # "unpublished" forever, and cheerfully release over versions the
+          # new name already has.
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+
+          # The registry is the whole decision, and deliberately so. The
+          # tempting alternative — diffing the version against the previous
+          # commit — answers a question that only resembles the one that
+          # matters: a push carrying several commits leaves the bump buried
+          # behind its followers, so both ends of the diff already read the
+          # new version and the release is silently skipped. Git archaeology
+          # in general ("is there a tag?", "was this commit released?")
+          # answers differently under squash-versus-merge, a force-push that
+          # replays the bump, and a re-run of this very workflow. "Is this
+          # version already public?" answers all of those identically, and it
+          # is the only question with consequences — a version already on npm
+          # can never be published again. An unchanged version therefore needs
+          # no special case: it is by definition one that already went out.
+          #
+          # npm separates the two outcomes precisely. A published version
+          # exits zero and prints itself; an unpublished version — or a
+          # package with no releases at all, which is the same answer for our
+          # purposes — exits non-zero with E404 in its error output. Anything
+          # else is the registry being unreachable or unwell rather than an
+          # answer, and a failed lookup must never read as "not published":
+          # that tags and re-announces a release that already shipped. So
+          # anything unrecognised aborts the job and asks for a human, which
+          # is the safe direction to be wrong in.
+          NPM_ERR="$RUNNER_TEMP/npm-view.err"
+          if PUBLISHED=$(npm view "$NAME@$VERSION" version 2>"$NPM_ERR"); then
+            NPM_STATUS=0
+          else
+            NPM_STATUS=$?
+          fi
+
+          if [ "$NPM_STATUS" -eq 0 ] && [ -n "$PUBLISHED" ]; then
+            echo "$VERSION is already on the registry — batching, nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! grep -q 'E404' "$NPM_ERR"; then
+            echo "npm could not say whether $NAME@$VERSION is published (exit $NPM_STATUS); refusing to guess:" >&2
+            cat "$NPM_ERR" >&2
+            exit 1
+          fi
+
+          echo "$VERSION is not on the registry — releasing"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create the tag and the GitHub Release
+        if: steps.decide.outputs.release == 'true'
+        # Everything the script reads arrives through env, never through a
+        # template expansion inside the script body. Expansions are pasted in
+        # as literal text before bash ever sees the line, so a value shaped
+        # like shell syntax becomes shell. These particular values are as
+        # trusted as anything gets — but the habit is the protection, and the
+        # next person to add a step here copies whatever is already written.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Creating the release is the one step here that is not naturally
+          # repeatable: gh fails outright if a release for the tag exists, and
+          # a run that tagged and then died before dispatching would be stuck
+          # failing forever on its own leftovers. The registry decides whether
+          # this version ships; an existing release is only evidence that a
+          # previous attempt got this far, so adopt it and carry on to the
+          # dispatch rather than treating it as an error.
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "release v$VERSION already exists — reusing it and moving on to the dispatch"
+            exit 0
+          fi
+
+          # gh creates the tag at --target as part of creating the release, so
+          # there is no separate `git tag && git push` to keep in step.
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --generate-notes
+
+      - name: Trigger publish.yml
+        if: steps.decide.outputs.release == 'true'
+        # Not redundant with the release event above, despite appearances.
+        #
+        # publish.yml triggers on `release: [published]`, so the obvious read
+        # is that the step above already started it. It did not. GitHub
+        # refuses to trigger workflows from events created with the default
+        # GITHUB_TOKEN, precisely so that a workflow cannot loop by producing
+        # its own trigger. workflow_dispatch and repository_dispatch are the
+        # documented exceptions, which is why this is an explicit dispatch.
+        # Remove it and releases get tagged but silently never publish.
+        #
+        # The alternative — moving `npm publish` into this file — breaks
+        # publishing outright. npm's trusted publisher for this package matches
+        # on the workflow FILENAME `publish.yml`; OIDC from any other file is
+        # rejected, and there is no long-lived token to fall back to (ADR 0007).
+        # So publishing stays in publish.yml and this workflow only pokes it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.decide.outputs.version }}
+        # Dispatched against the new tag, not main: publish.yml then builds and
+        # publishes exactly the commit that was released, even if main has
+        # moved on by the time the run starts.
+        run: |
+          set -euo pipefail
+          gh workflow run publish.yml --ref "v$VERSION"
