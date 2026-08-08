@@ -18,3 +18,4 @@ architecture without reading the source.
 - [0005 — Credentials arrive as environment variable names, never values](0005-credentials-as-env-var-names.md)
 - [0006 — A hand-rolled linear-time glob matcher](0006-linear-time-glob-matcher.md)
 - [0007 — Publish from CI with OIDC trusted publishing](0007-publish-via-oidc-trusted-publishing.md)
+- [0008 — Release when the version number changes](0008-release-on-version-change.md)
