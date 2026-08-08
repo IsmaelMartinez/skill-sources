@@ -24,7 +24,9 @@ permissions:
 # attestation signed by the genuine workflow to prove it. So the tests run
 # unprivileged, and only the job that publishes gets id-token: write.
 jobs:
-  test:
+  # Named for what it does rather than `test`, which test.yml already uses —
+  # two jobs of the same name read as "test / test" in the checks list.
+  verify:
     runs-on: ubuntu-latest
     steps:
       # Full history: the test suite uses this repo's own log as a fixture
@@ -40,7 +42,7 @@ jobs:
       - run: npm test
 
   publish:
-    needs: test
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -19,18 +19,19 @@ const PATHSPEC_MAGIC = /[*?[]|^:/;
  * Going through git rather than a host API is what makes this work the same on
  * GitHub, GitLab, Bitbucket or a self-hosted server, over SSH or HTTPS, using
  * whatever credentials the caller already has configured.
+ *
+ * Every git invocation here separates options from manifest-supplied values,
+ * with `--` where the command documents it and `--end-of-options` where a
+ * revision sits ahead of the pathspec, so a `repo` or `ref` beginning with a
+ * dash is a bad name rather than a flag. The clone gate happens to reject
+ * those before they reach `git log` today; that is incidental, and issue #17
+ * proposes restructuring exactly that gate, so the separators are what holds
+ * the property. This needs git 2.24+, where `--end-of-options` arrived.
  */
 export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
   const clones = new Map();
   const dirs = [];
 
-  // Every git invocation below separates options from manifest-supplied values,
-  // with `--` where the command documents it and `--end-of-options` where a
-  // revision sits ahead of the pathspec. Nothing in the manifest is treated as
-  // an option, so a `repo` or `ref` beginning with a dash is a bad name rather
-  // than a flag. Today the clone gate happens to reject those before they reach
-  // `git log`; that is incidental, and issue #17 proposes restructuring exactly
-  // that gate, so the separators are what actually holds the property.
   async function clone(repo, ref) {
     const base = ["clone", "--filter=blob:none", "--no-checkout", "--quiet"];
 
