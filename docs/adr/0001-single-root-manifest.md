@@ -9,9 +9,12 @@ sources recorded somewhere machine-readable. The intuitive home is the skill
 itself — a `sources` key in `SKILL.md` frontmatter — and that is what was
 tried first, for two months across ~34 skills in a production registry.
 
-It failed in three ways. Spec validators warned about the unrecognised
-frontmatter field, and any per-skill scheme living in frontmatter inherits
-that problem. The declarations duplicated a central mapping the pipeline
+It failed in three ways. Frontmatter had nowhere to put it: the spec's
+`metadata` map takes string values only, so a list of upstreams would have to
+be stringified, and declaring `sources` as a sibling field instead left
+validators warning about an unrecognised key. Any per-skill scheme living in
+frontmatter meets one wall or the other. The declarations duplicated a central
+mapping the pipeline
 already read, and the CI check reconciling the two spent its life catching
 mismatches the duplication itself created. And answering "what do we depend
 on, and what has moved?" required walking the tree, while nothing stopped a

@@ -22,6 +22,26 @@ $ npx skill-sources check
 It reports; it never rewrites. Re-distilling a document into guidance is human
 judgement, so drift opens a review rather than a patch.
 
+## Why this repository exists
+
+The tool is the smaller half. The point is the convention it implements, written
+up on its own in [CONVENTION.md](CONVENTION.md) so it can be read, argued with
+and implemented without this code.
+
+That ordering was deliberate. The idea was first put to the Agent Skills
+specification in [discussion #436](https://github.com/agentskills/agentskills/discussions/436),
+where the answer was that recording upstream provenance is build-tool territory
+rather than something the spec should carry — and that the spec follows
+convergence rather than forcing it. Fair enough. So this exists to find out
+whether a shape worth converging on is there at all, by running one in
+production and seeing what breaks.
+
+It is MIT. Use it, fork it, or take the format and change it. What matters is
+whether a shared shape emerges, not whether this is the one that does — and the
+question is still genuinely open, including the possibility that provenance
+belongs beside each skill rather than in a root manifest, or that this stays a
+private concern of whatever tool you already run.
+
 ## Install
 
 Nothing to install — it runs from `npx`, and needs Node 20+. Git sources also
@@ -247,6 +267,16 @@ watches code in the same repository, this watches documents outside it.
 [`nbp-skillforge`](https://github.com/nbpadilha/nbp-skillforge) composes skills
 from shared bricks and gates on drift between a generated skill and its recipe.
 Complementary — that drift is regenerable, this one is not.
+
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+is the nearest thing to a general shape for this, and the closest prior art
+here: frontmatter for knowledge concepts carrying a `sources` list, a `verified`
+log of who checked and when, and a `stale_after` date. The two compose rather
+than compete — OKF says where a concept came from and when someone last looked,
+and expires it on the calendar; nothing in it resolves the source to find out
+whether it has actually moved, which is the whole of what this does. Its
+`verified` event log is better than the single `last-reviewed` marker used here,
+which cannot distinguish a human accepting a change from a tool recording one.
 
 Background and design rationale:
 [agentskills#436](https://github.com/agentskills/agentskills/discussions/436).

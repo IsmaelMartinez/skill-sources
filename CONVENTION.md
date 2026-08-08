@@ -73,10 +73,18 @@ Colocating provenance with the skill reads better and was the first thing we
 tried, as a `sources` key in `SKILL.md` frontmatter. We removed it after two
 months in production across ~34 skills:
 
-`sources` is not a recognised frontmatter field, so spec validators warned about
-it and we had to suppress them. Any per-skill scheme that lives in frontmatter
-inherits that problem. A sidecar file avoids it, at the cost of a second file
-per skill.
+The constraint that settles it is in the specification itself. `metadata` is the
+sanctioned place for "additional properties not defined by the Agent Skills
+spec", which is exactly what this is — but it is specified as a map from string
+keys to *string values*. A list of upstream objects cannot go there without
+being stringified into one, and a format whose canonical representation is
+YAML-inside-a-string is not a format anyone should have to parse.
+
+Declaring `sources` as a sibling field instead puts it outside the spec
+altogether: validators warned about the unrecognised key and we suppressed them,
+which works but leaves every consumer disagreeing about whether the file is
+valid. Any per-skill scheme living in frontmatter meets one of those two walls.
+A sidecar file avoids both, at the cost of a second file per skill.
 
 The declaration duplicated a central mapping the pipeline already read, and the
 CI check that cross-validated the two spent its life catching mismatches the
@@ -133,3 +141,13 @@ in the same repository, this watches documents outside it.
 [`nbp-skillforge`](https://github.com/nbpadilha/nbp-skillforge) builds skills
 from shared bricks and gates on internal drift between a generated skill and its
 recipe. Complementary: that drift is regenerable, this one is not.
+
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+is the closest general prior art: frontmatter for knowledge concepts with a
+`sources` list, a `verified` log of check events, and a `stale_after` date. It
+locates a source and expires the concept on the calendar; it does not resolve
+the source to see whether it moved, which is the axis this convention adds. Its
+`verified` log is the better idea in the other direction — `last-reviewed` here
+is a single marker that cannot say whether a human accepted the change or a tool
+merely recorded it, and a future version of this convention should probably
+split those.
