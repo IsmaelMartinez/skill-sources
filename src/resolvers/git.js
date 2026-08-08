@@ -19,6 +19,14 @@ const PATHSPEC_MAGIC = /[*?[]|^:/;
  * Going through git rather than a host API is what makes this work the same on
  * GitHub, GitLab, Bitbucket or a self-hosted server, over SSH or HTTPS, using
  * whatever credentials the caller already has configured.
+ *
+ * Every git invocation here separates options from manifest-supplied values,
+ * with `--` where the command documents it and `--end-of-options` where a
+ * revision sits ahead of the pathspec, so a `repo` or `ref` beginning with a
+ * dash is a bad name rather than a flag. The clone gate happens to reject
+ * those before they reach `git log` today; that is incidental, and issue #17
+ * proposes restructuring exactly that gate, so the separators are what holds
+ * the property. This needs git 2.24+, where `--end-of-options` arrived.
  */
 export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
   const clones = new Map();
@@ -37,7 +45,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       try {
         await run(
           "git",
-          [...base, "--branch", ref, "--single-branch", repo, dir],
+          [...base, "--branch", ref, "--single-branch", "--", repo, dir],
           {
             timeout: cloneTimeoutMs,
           },
@@ -59,7 +67,9 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
     const wider = await mkdtemp(join(tmpdir(), "skill-sources-"));
     dirs.push(wider);
     try {
-      await run("git", [...base, repo, wider], { timeout: cloneTimeoutMs });
+      await run("git", [...base, "--", repo, wider], {
+        timeout: cloneTimeoutMs,
+      });
     } catch (err) {
       throw cloneError(err, repo, ref);
     }
@@ -84,7 +94,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       // Naming the ref explicitly keeps the narrow and wide clones equivalent:
       // in the narrow case it is the checked-out branch, in the wide case it is
       // the only thing distinguishing this entry from the default branch.
-      const args = ["log", "-1", "--format=%H"];
+      const args = ["log", "-1", "--format=%H", "--end-of-options"];
       if (ref) args.push(ref);
       args.push("--", path);
 
@@ -125,7 +135,18 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
       try {
         const { stdout } = await run(
           "git",
-          ["ls-tree", "-r", "--name-only", ref ?? "HEAD", "--", path],
+          [
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "--end-of-options",
+            // `||`, not `??`: resolve() drops a ref of "" and falls back to
+            // HEAD, and handing ls-tree that same empty string instead would
+            // fail the source on "not a valid object name" rather than agree.
+            ref || "HEAD",
+            "--",
+            path,
+          ],
           { cwd: dir, timeout: cloneTimeoutMs },
         );
         return stdout.trim() !== "";
@@ -148,7 +169,7 @@ export function createGitResolver({ cloneTimeoutMs = 120_000 } = {}) {
 /** Shared so `exists` and `resolve` report a bad ref the same sanitised way. */
 function readError(err, repo, ref) {
   return new Error(
-    `could not read '${ref ?? "HEAD"}' in ${repo}: ${gitReason(err)}`,
+    `could not read '${ref || "HEAD"}' in ${repo}: ${gitReason(err)}`,
   );
 }
 
@@ -171,7 +192,13 @@ function looksLikeSha(ref) {
  */
 export async function remoteRefState(repo, ref, timeout = 120_000) {
   try {
-    await run("git", ["ls-remote", "--exit-code", repo, ref], { timeout });
+    await run(
+      "git",
+      ["ls-remote", "--exit-code", "--end-of-options", repo, ref],
+      {
+        timeout,
+      },
+    );
     return "present";
   } catch (err) {
     return err?.code === 2 ? "absent" : "unreachable";

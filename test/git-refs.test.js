@@ -109,6 +109,20 @@ describe("git resolver — refs beyond a branch name", () => {
     );
   }, 60_000);
 
+  // An empty ref is the one value the two paths could read differently:
+  // resolve() drops it and asks for HEAD, so exists() saying "not a valid
+  // object name" would fail a source the resolver had just answered for.
+  it("treats an empty ref the same way in exists() as in resolve()", async () => {
+    const resolver = createGitResolver();
+    try {
+      const upstream = { repo: dir, path: "doc.md", ref: "" };
+      expect(await resolver.resolve(upstream)).toBe(headSha);
+      expect(await resolver.exists(upstream)).toBe(true);
+    } finally {
+      await resolver.cleanup();
+    }
+  }, 60_000);
+
   it("reports an unreachable repository even when the ref is a sha", async () => {
     const resolver = createGitResolver();
     try {
