@@ -31,9 +31,11 @@ jobs:
           node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1+. Node 24 bundles npm 11, so the
-      # global npm upgrade this step used to do is no longer needed; dropping
-      # back below Node 24 would reintroduce it.
+      # Trusted publishing needs npm 11.5.1+, which arrived in Node 24.5.0 —
+      # 24.0.0 shipped npm 11.3.0, so "Node 24" is not on its own enough. The
+      # bare `24` above resolves to the newest 24.x, which is why the global npm
+      # upgrade this step used to do is gone. Pinning an exact Node below 24.5.0
+      # would bring it back.
       # No lifecycle scripts. This job holds id-token: write, so a postinstall
       # anywhere in the dev tree could mint an npm publish credential for this
       # package and ship a tarball carrying a genuine provenance attestation.
