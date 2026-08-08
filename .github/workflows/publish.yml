@@ -15,10 +15,16 @@ on:
 # so a first publish still needs a temporary granular token (npm/cli#8544).
 permissions:
   contents: read
-  id-token: write
 
+# Split in two so the OIDC token is held by as little as possible. The suite is
+# what runs third-party code here — vitest and its tree are dev dependencies,
+# and Dependabot can land patch bumps to them without a human reading the diff.
+# Running that in a job that can mint an npm publish credential would mean any
+# one of those packages could publish as this package, with a provenance
+# attestation signed by the genuine workflow to prove it. So the tests run
+# unprivileged, and only the job that publishes gets id-token: write.
 jobs:
-  publish:
+  test:
     runs-on: ubuntu-latest
     steps:
       # Full history: the test suite uses this repo's own log as a fixture
@@ -30,16 +36,29 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1+, which arrived in Node 24.5.0 —
-      # 24.0.0 shipped npm 11.3.0, so "Node 24" is not on its own enough. The
-      # bare `24` above resolves to the newest 24.x, which is why the global npm
-      # upgrade this step used to do is gone. Pinning an exact Node below 24.5.0
-      # would bring it back.
-      # No lifecycle scripts. This job holds id-token: write, so a postinstall
-      # anywhere in the dev tree could mint an npm publish credential for this
-      # package and ship a tarball carrying a genuine provenance attestation.
-      # Nothing here needs install scripts; the suite passes without them.
       - run: npm ci --ignore-scripts
       - run: npm test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      # Trusted publishing needs npm 11.5.1+, which arrived in Node 24.5.0 —
+      # 24.0.0 shipped npm 11.3.0, so "Node 24" is not on its own enough. The
+      # bare `24` resolves to the newest 24.x, which is why the global npm
+      # upgrade this step used to do is gone. Pinning an exact Node below 24.5.0
+      # would bring it back.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # Nothing third-party executes in this job: --ignore-scripts blocks
+      # install hooks, and there are no prepare or prepack scripts for `npm
+      # publish` to run. What is left is npm's own code and the tarball.
+      - run: npm ci --ignore-scripts
       - run: npm publish --provenance --access public
