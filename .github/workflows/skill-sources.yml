@@ -14,10 +14,10 @@ name: skill sources
 # GitHub delays scheduled jobs under load, so an odd minute starts sooner.
 #
 # Two things worth knowing about scheduled workflows. Cron is UTC and does not
-# follow British summer time, so this lands an hour later in the year than it
-# reads. And GitHub disables schedules in a repository with no activity for 60
-# days, so a quiet stretch stops the checking silently; workflow_dispatch is
-# kept below so a run can always be forced by hand to confirm it still works.
+# follow British summer time, so 06:17 here is 07:17 local for half the year.
+# And GitHub disables schedules in a repository with no activity for 60 days,
+# so a quiet stretch stops the checking silently; workflow_dispatch is kept
+# below so a run can always be forced by hand to confirm it still works.
 #
 # Deliberately not run on pull requests. The check reaches a repository this
 # one does not control, so an upstream outage would fail CI on changes that
