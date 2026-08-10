@@ -1,0 +1,47 @@
+name: skill sources
+
+# This repository follows its own convention, and this is the job that proves
+# it: skill-sources.yml declares skills/agent-skills-frontmatter against the
+# specification it was distilled from, and the run below asserts both that the
+# upstream has not moved and that the skill is still on disk.
+#
+# On the schedule. Weekly rather than daily, because the upstream is a
+# specification that moves on the order of weeks and a daily run would mostly
+# reannounce a result nobody acted on yesterday, which is how a red cross stops
+# being read. Monday morning so drift is waiting at the start of the week
+# rather than surfacing on a Friday evening. The minute is deliberately not
+# zero: the top of the hour is the most contended slot on shared runners and
+# GitHub delays scheduled jobs under load, so an odd minute starts sooner.
+#
+# Two things worth knowing about scheduled workflows. Cron is UTC and does not
+# follow British summer time, so 06:17 here is 07:17 local for half the year.
+# And GitHub disables schedules in a repository with no activity for 60 days,
+# so a quiet stretch stops the checking silently; workflow_dispatch is kept
+# below so a run can always be forced by hand to confirm it still works.
+#
+# Deliberately not run on pull requests. The check reaches a repository this
+# one does not control, so an upstream outage would fail CI on changes that
+# have nothing to do with it. Drift is not urgent enough to buy that.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # Fails the run on drift, on a skill that has been renamed out from under
+      # its manifest entry, and on an upstream that cannot be reached. A failed
+      # run is the whole notification; opening a pull request from here would
+      # need write permissions this job has no other use for.
+      - run: node bin/cli.mjs check --verify-skills 'skills/*'
