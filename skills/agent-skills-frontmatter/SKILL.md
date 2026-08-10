@@ -62,8 +62,8 @@ description: Helps with PDFs.
 `compatibility` states environment requirements — intended product, system
 packages, network access — and most skills should leave it out rather than
 state the obvious. `metadata` is a client-defined key-value bag; since the
-values are strings, a version has to be quoted or YAML will parse it as a float
-and the skill will fail validation:
+values are strings, a version has to be quoted, or YAML parses it as a float
+rather than the string the spec asks for:
 
 ```yaml
 metadata:
