@@ -42,6 +42,14 @@ question is still genuinely open, including the possibility that provenance
 belongs beside each skill rather than in a root manifest, or that this stays a
 private concern of whatever tool you already run.
 
+The repository follows its own convention, which is the only honest way to
+advocate one. [`skill-sources.yml`](skill-sources.yml) declares
+[`skills/agent-skills-frontmatter`](skills/agent-skills-frontmatter/SKILL.md), a
+skill distilled from the Agent Skills specification, and a weekly workflow
+checks that the specification has not moved underneath it. When it does, that
+run goes red and the skill needs rereading — which is the entire argument,
+applied to this repository rather than described.
+
 ## Install
 
 Nothing to install — it runs from `npx`, and needs Node 20+. Git sources also
@@ -137,6 +145,15 @@ finding.
 
 Opening the pull request is deliberately left to you, so the tool stays
 host-agnostic. `--json` gives you what you need.
+
+The same line holds for drafting the update. Handing the drifted entry and the
+diff to a model, and letting it propose the edit to the skill, is a natural
+thing to build on top of this, and works well in practice. It is deliberately
+not in here: it would give a tool whose whole value is a deterministic answer
+you can gate CI on an API key, a provider, a bill and a non-deterministic
+output. Detecting drift and remediating it are separable, and `--json` is the
+seam between them. Anyone who wants the second half is better served building
+it against their own model, prompts and review expectations.
 
 ### Reaching a private upstream
 

@@ -1,0 +1,18 @@
+# This repository's own manifest, at the path the tool reads by default.
+#
+# It declares one real skill against one real upstream, so `check` here does the
+# actual work rather than demonstrating a shape: clone the specification repo,
+# find the last commit that touched the path, compare it against the marker
+# below, and confirm the skill it belongs to is still on disk.
+#
+# Expect `fresh` until the specification changes, then `drifted`, which is the
+# signal to reread the document and update the skill.
+version: 1
+sources:
+  - skill: agent-skills-frontmatter
+    upstream:
+      - type: git
+        repo: https://github.com/agentskills/agentskills.git
+        path: docs/specification.mdx
+        ref: main
+        last-reviewed: 217be548739f21d6008915c29aefe320ea1a90af

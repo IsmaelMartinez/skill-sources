@@ -1,24 +1,23 @@
 # Examples
 
-Four manifests, each showing one thing the format has to be able to say. Start
-with [`live.yml`](live.yml) if you want to see the tool actually work — it is
-the only one here that resolves against a real document. It points at the Agent
-Skills specification, a document someone else owns and will change without
-telling you, which is exactly the situation this exists for:
+Three manifests, each showing one thing the format has to be able to say. They
+use illustrative addresses and demonstrate shape rather than live resolution.
+
+If you want to see the tool actually work, the manifest to read is not in here:
+it is [`skill-sources.yml`](../skill-sources.yml) at the repository root, which
+declares this repository's own skill against the Agent Skills specification it
+was distilled from. That one resolves, and a scheduled workflow runs it weekly,
+so it is checked rather than asserted:
 
 ```console
-$ npx skill-sources check -m examples/live.yml
+$ npx skill-sources check --verify-skills 'skills/*'
   fresh      agent-skills-frontmatter  git:https://github.com/agentskills/agentskills.git@main:docs/specification.mdx
 
 1 fresh
 ```
 
-It will say `fresh` until that specification changes and `drifted` afterwards.
-That is the whole tool in one entry. The marker was recorded with
-`skill-sources seed`, which is how you start the clock on any source.
-
-The other three use illustrative addresses and demonstrate shape rather than
-live resolution.
+The marker was recorded with `skill-sources seed`, which is how you start the
+clock on any source.
 
 [`minimal.yml`](minimal.yml) is the smallest useful manifest: one skill, one git
 upstream, one recorded marker. If you are adding this to a repository with a
@@ -54,12 +53,12 @@ $ npx skill-sources check -m examples/nested-layout.yml \
     --verify-skills 'plugins/*/skills/*'
 ```
 
-One thing to expect. Apart from `live.yml`, the upstreams named here are
-illustrative addresses on `example.com` and `github.com/example`, and they do
-not resolve — `report` against them prints an `error` line for each, which is
-itself worth seeing, since it is what a genuine outage or a revoked credential
-looks like. Those three demonstrate that the manifest parses and how failures
-are reported; `live.yml` is the one that demonstrates drift detection.
+One thing to expect. The upstreams named here are illustrative addresses on
+`example.com` and `github.com/example`, and they do not resolve — `report`
+against them prints an `error` line for each, which is itself worth seeing,
+since it is what a genuine outage or a revoked credential looks like. These
+three demonstrate that the manifest parses and how failures are reported; the
+root manifest is the one that demonstrates drift detection.
 
 Every file here is validated by `test/examples.test.js` against the real
 manifest parser, so if the schema moves and these are not updated with it, the
