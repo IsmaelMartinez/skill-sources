@@ -1,6 +1,6 @@
 {
   "name": "skill-sources",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Detect when the upstream documents an agent skill derives from have moved",
   "type": "module",
   "bin": {
